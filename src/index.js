@@ -44,7 +44,12 @@ program
   .option('-r, --recursive', 'Process directories recursively')
   .option('--progressive', 'Enable progressive encoding for images')
   .option('--overwrite', 'Overwrite existing files')
-  .option('--parallel <number>', 'Number of parallel processes', '4')
+  .option('--parallel <number>', 'Number of parallel processes (default: auto-detect)', null)
+  .option('--threads <number>', 'Number of worker threads for multi-core processing')
+  .option('--ultrafast', 'Ultra-fast mode (sacrifices quality for speed)')
+  .option('--no-optimize', 'Skip advanced optimizations for maximum speed')
+  .option('--multi-thread', 'Enable multi-threaded processing (auto-enabled for 4+ files or files larger than 3GB)')
+  .option('--force-threads', 'Force multi-threading even for small file counts')
   .action(compressCommand);
 
 program

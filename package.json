@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node src/index.js",
+    "multi-thread-demo": "node examples/multi-thread-demo.js",
     "build": "node scripts/build.js",
     "test": "jest",
     "dev": "nodemon src/index.js"

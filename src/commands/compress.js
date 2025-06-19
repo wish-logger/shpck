@@ -5,11 +5,14 @@ const ora = require('ora');
 const { glob } = require('glob');
 const { filesize } = require('filesize');
 const mime = require('mime-types');
+const os = require('os');
 
 const { ImageCompressor } = require('../compressors/imageCompressor');
 const { VideoCompressor } = require('../compressors/videoCompressor');
 const { FileUtils } = require('../utils/fileUtils');
 const { ProgressManager } = require('../utils/progressManager');
+const { ThreadManager } = require('../utils/threadManager');
+const { SystemWarnings } = require('../utils/systemWarnings');
 
 async function compressCommand(files, options) {
   const isQuiet = options.skip;
@@ -31,12 +34,28 @@ async function compressCommand(files, options) {
       spinner.succeed(chalk.green(`Found ${resolvedFiles.length} files to compress`));
     }
 
+    if (!options.parallel) {
+      const cpuCores = os.cpus().length;
+      options.parallel = Math.max(cpuCores * 2, 8);
+      if (!isQuiet) {
+        console.log(chalk.gray(`⚡ Auto-detected ${options.parallel} parallel processes`));
+      }
+    }
+
     const fileGroups = await groupFilesByType(resolvedFiles);
     
     const progressManager = new ProgressManager(resolvedFiles.length);
     
-    const imageCompressor = new ImageCompressor(options);
-    const videoCompressor = new VideoCompressor(options);
+    const imageCompressor = new ImageCompressor({
+      ...options,
+      speedOptimized: options.ultrafast || false,
+      skipOptimizations: options.noOptimize || false
+    });
+    const videoCompressor = new VideoCompressor({
+      ...options,
+      speedOptimized: options.ultrafast || false,
+      skipOptimizations: options.noOptimize || false
+    });
     
     const results = {
       processed: 0,
@@ -44,22 +63,69 @@ async function compressCommand(files, options) {
       errors: []
     };
 
+    const hasLargeFiles = await checkForLargeFiles(resolvedFiles);
+    
+    const useMultiThread = options.multiThread || 
+                           options.forceThreads || 
+                           (resolvedFiles.length >= 4 && !options.parallel) ||
+                           hasLargeFiles;
+    
+    if (useMultiThread) {
+      await SystemWarnings.checkSystemOptimization(options);
+      
+      if (!isQuiet && hasLargeFiles) {
+        const largeFiles = checkForLargeFiles.largeFiles || [];
+        console.log(chalk.yellow('📦 Large files detected (>3GB) - auto-enabling multi-threading'));
+        largeFiles.forEach(({file, size}) => {
+          console.log(chalk.gray(`   • ${file}: ${filesize(size)}`));
+        });
+      }
+    }
+    
     if (!isQuiet) {
-      console.log(chalk.cyan('\n🚀 Starting compression...\n'));
+      if (useMultiThread) {
+        console.log(chalk.cyan('\n🧵 Starting multi-threaded compression...\n'));
+      } else {
+        console.log(chalk.cyan('\n🚀 Starting compression...\n'));
+      }
     }
 
-    if (fileGroups.images.length > 0) {
-      if (!isQuiet) {
-        console.log(chalk.yellow(`📸 Processing ${fileGroups.images.length} images...`));
+    if (useMultiThread) {
+      const threadManager = new ThreadManager(options);
+      
+      if (fileGroups.images.length > 0) {
+        if (!isQuiet) {
+          console.log(chalk.yellow(`📸 Processing ${fileGroups.images.length} images with worker threads...`));
+        }
+        const imageResults = await threadManager.processFiles(fileGroups.images, options);
+        results.processed += imageResults.processed;
+        results.totalSizeReduction += imageResults.totalSizeReduction;
+        results.errors.push(...imageResults.errors);
       }
-      await processFiles(fileGroups.images, imageCompressor, options, progressManager, results);
-    }
 
-    if (fileGroups.videos.length > 0) {
-      if (!isQuiet) {
-        console.log(chalk.yellow(`🎥 Processing ${fileGroups.videos.length} videos...`));
+      if (fileGroups.videos.length > 0) {
+        if (!isQuiet) {
+          console.log(chalk.yellow(`🎥 Processing ${fileGroups.videos.length} videos with worker threads...`));
+        }
+        const videoResults = await threadManager.processFiles(fileGroups.videos, options);
+        results.processed += videoResults.processed;
+        results.totalSizeReduction += videoResults.totalSizeReduction;
+        results.errors.push(...videoResults.errors);
       }
-      await processFiles(fileGroups.videos, videoCompressor, options, progressManager, results);
+    } else {
+      if (fileGroups.images.length > 0) {
+        if (!isQuiet) {
+          console.log(chalk.yellow(`📸 Processing ${fileGroups.images.length} images...`));
+        }
+        await processFiles(fileGroups.images, imageCompressor, options, progressManager, results);
+      }
+
+      if (fileGroups.videos.length > 0) {
+        if (!isQuiet) {
+          console.log(chalk.yellow(`🎥 Processing ${fileGroups.videos.length} videos...`));
+        }
+        await processFiles(fileGroups.videos, videoCompressor, options, progressManager, results);
+      }
     }
 
     if (fileGroups.other.length > 0 && !isQuiet) {
@@ -105,6 +171,29 @@ async function resolveFiles(patterns, recursive) {
   return [...new Set(allFiles)].sort();
 }
 
+async function checkForLargeFiles(files) {
+  const LARGE_FILE_THRESHOLD = 3 * 1024 * 1024 * 1024;
+  const largeFiles = [];
+    
+  for (const file of files) {
+    try {
+      const stats = await fs.stat(file);
+      if (stats.size > LARGE_FILE_THRESHOLD) {
+        largeFiles.push({
+          file: path.basename(file),
+          size: stats.size
+        });
+      }
+    } catch (error) {
+      continue;
+    }
+  }
+  
+  checkForLargeFiles.largeFiles = largeFiles;
+  
+  return largeFiles.length > 0;
+}
+
 async function groupFilesByType(files) {
   const groups = {
     images: [],
@@ -132,39 +221,48 @@ async function groupFilesByType(files) {
 }
 
 async function processFiles(files, compressor, options, progressManager, results) {
-  const parallel = parseInt(options.parallel) || 4;
-  const chunks = chunkArray(files, parallel);
+  const parallel = parseInt(options.parallel) || 8;
   const isQuiet = options.skip;
 
-  for (const chunk of chunks) {
-    const promises = chunk.map(async (file) => {
-      try {
-        const result = await compressor.compress(file, options);
-        
-        progressManager.update(file, result);
-        results.processed++;
-        results.totalSizeReduction += (result.originalSize - result.compressedSize);
-        
-        if (!isQuiet) {
-          const reduction = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
-          console.log(
-            chalk.green('✓') +
-            ` ${path.basename(file)} ` +
-            chalk.gray(`(${filesize(result.originalSize)} → ${filesize(result.compressedSize)}) `) +
-            chalk.cyan(`-${reduction}%`)
-          );
-        }
-        
-      } catch (error) {
-        results.errors.push({ file, error: error.message });
-        if (!isQuiet) {
-          console.log(chalk.red('✗') + ` ${path.basename(file)} - ${error.message}`);
-        }
+  let currentlyProcessing = 0;
+  const maxConcurrent = parallel;
+  
+  const processFile = async (file) => {
+    while (currentlyProcessing >= maxConcurrent) {
+      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+    
+    currentlyProcessing++;
+    
+    try {
+      const result = await compressor.compress(file, options);
+      
+      progressManager.update(file, result);
+      results.processed++;
+      results.totalSizeReduction += (result.originalSize - result.compressedSize);
+      
+      if (!isQuiet) {
+        const reduction = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
+        console.log(
+          chalk.green('✓') +
+          ` ${path.basename(file)} ` +
+          chalk.gray(`(${filesize(result.originalSize)} → ${filesize(result.compressedSize)}) `) +
+          chalk.cyan(`-${reduction}%`)
+        );
       }
-    });
+      
+    } catch (error) {
+      results.errors.push({ file, error: error.message });
+      if (!isQuiet) {
+        console.log(chalk.red('✗') + ` ${path.basename(file)} - ${error.message}`);
+      }
+    } finally {
+      currentlyProcessing--;
+    }
+  };
 
-    await Promise.all(promises);
-  }
+  const promises = files.map(processFile);
+  await Promise.all(promises);
 }
 
 function chunkArray(array, chunkSize) {

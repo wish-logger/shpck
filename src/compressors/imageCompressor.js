@@ -6,6 +6,8 @@ const { FileUtils } = require('../utils/fileUtils');
 class ImageCompressor {
   constructor(options = {}) {
     this.options = options;
+    this.speedOptimized = options.speedOptimized || false;
+    this.skipOptimizations = options.skipOptimizations || false;
   }
 
   async compress(inputFile, options = {}) {
@@ -64,7 +66,11 @@ class ImageCompressor {
 
   async applyCompression(sharpInstance, outputPath, options) {
     const format = this.determineOutputFormat(outputPath, options.format);
-    const quality = parseInt(options.quality) || 85;
+    let quality = parseInt(options.quality) || 85;
+    
+    if (this.speedOptimized) {
+      quality = Math.min(quality, 70);
+    }
     
     let compressionOptions = {};
     
@@ -73,10 +79,10 @@ class ImageCompressor {
       case 'jpg':
         compressionOptions = {
           quality,
-          progressive: options.progressive || true,
-          mozjpeg: true,
-          optimiseScans: true,
-          optimiseCoding: true
+          progressive: this.speedOptimized ? false : (options.progressive || true),
+          mozjpeg: !this.speedOptimized,
+          optimiseScans: !this.skipOptimizations,
+          optimiseCoding: !this.skipOptimizations
         };
         
         if (sharpInstance._targetSize) {
@@ -89,10 +95,10 @@ class ImageCompressor {
       case 'png':
         compressionOptions = {
           quality,
-          progressive: options.progressive || false,
-          compressionLevel: 9,
-          adaptiveFiltering: true,
-          palette: quality < 90
+          progressive: false,
+          compressionLevel: this.speedOptimized ? 3 : 9,
+          adaptiveFiltering: !this.skipOptimizations,
+          palette: quality < 90 && !this.speedOptimized
         };
         
         if (sharpInstance._targetSize) {
@@ -105,9 +111,9 @@ class ImageCompressor {
       case 'webp':
         compressionOptions = {
           quality,
-          lossless: quality >= 95,
-          effort: 6,
-          nearLossless: quality >= 90
+          lossless: false,
+          effort: this.speedOptimized ? 1 : 4,
+          nearLossless: false
         };
         
         if (sharpInstance._targetSize) {
@@ -120,8 +126,8 @@ class ImageCompressor {
       case 'avif':
         compressionOptions = {
           quality,
-          lossless: quality >= 95,
-          effort: 6
+          lossless: false,
+          effort: this.speedOptimized ? 1 : 4
         };
         
         if (sharpInstance._targetSize) {

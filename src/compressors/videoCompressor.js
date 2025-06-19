@@ -6,6 +6,8 @@ const { FileUtils } = require('../utils/fileUtils');
 class VideoCompressor {
   constructor(options = {}) {
     this.options = options;
+    this.speedOptimized = options.speedOptimized || false;
+    this.skipOptimizations = options.skipOptimizations || false;
     
     this.setupFFmpegPath();
   }
@@ -61,7 +63,10 @@ class VideoCompressor {
     } else if (options.bitrate) {
       command = command.videoBitrate(options.bitrate);
     } else {
-      const quality = options.quality || 'medium';
+      let quality = options.quality || 'medium';
+      if (this.speedOptimized) {
+        quality = 'ultrafast';
+      }
       command = this.applyQualitySettings(command, quality, codec);
     }
     
@@ -81,10 +86,18 @@ class VideoCompressor {
       }
     }
     
+    const preset = this.speedOptimized ? 'ultrafast' : 'fast';
     command = command
-      .addOption('-preset', 'fast')
-      .addOption('-movflags', 'faststart')
+      .addOption('-preset', preset)
+      .addOption('-movflags', this.skipOptimizations ? '' : 'faststart')
       .addOption('-pix_fmt', 'yuv420p');
+    
+    if (this.speedOptimized) {
+      command = command
+        .addOption('-tune', 'zerolatency')
+        .addOption('-threads', '0')
+        .addOption('-cpu-used', '8');
+    }
     
     const outputFormat = this.getOutputFormat(outputPath);
     if (outputFormat === 'mp4') {
