@@ -124,7 +124,7 @@ await compress.video('input.mp4', {
 
 ## 🛠️ Requirements
 
-- Node.js 16+ 
+- Node.js 21+ 
 - FFmpeg (for video compression)
 - libvips (installed automatically with Sharp)
 
