@@ -90,6 +90,10 @@ async function compressCommand(files, options) {
       }
     }
 
+    if (fileGroups.videos.length > 0 && options.overwrite && !isQuiet) {
+      console.log(chalk.yellow('⚠️  Warning: The --overwrite flag is not supported for video files.'));
+    }
+
     if (useMultiThread) {
       const threadManager = new ThreadManager(options);
       
