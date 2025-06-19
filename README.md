@@ -165,10 +165,10 @@ Create a `.shpckrc.json` file for default settings:
 ## 🔧 API Usage
 
 ```javascript
-const { compress } = require('shpck');
+import shpck from 'shpck';
 
 // Ultra-fast image compression
-await compress.image('input.jpg', {
+await shpck.compress(['input.jpg'], {
   quality: 80,
   ultrafast: true,
   threads: 8,
@@ -176,7 +176,7 @@ await compress.image('input.jpg', {
 });
 
 // Multi-threaded video compression
-await compress.video('input.mp4', {
+await shpck.compress(['input.mp4'], {
   targetSize: '200MB',
   threads: 12,
   speedOptimized: true,
@@ -184,7 +184,7 @@ await compress.video('input.mp4', {
 });
 
 // Batch processing with worker threads
-await compress.batch(['*.jpg', '*.png'], {
+await shpck.compress(['*.jpg', '*.png'], {
   ultrafast: true,
   threads: 16,
   noOptimize: true,
