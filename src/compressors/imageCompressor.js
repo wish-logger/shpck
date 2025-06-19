@@ -68,7 +68,13 @@ class ImageCompressor {
     const format = this.determineOutputFormat(outputPath, options.format);
     let quality = parseInt(options.quality) || 85;
     
-    if (this.speedOptimized) {
+    quality = Math.max(1, Math.min(100, quality));
+    
+    if (format.toLowerCase() === 'png') {
+      if (quality > 95) {
+        quality = 90;
+      }
+    } else if (this.speedOptimized) {
       quality = Math.min(quality, 70);
     }
     
@@ -93,12 +99,15 @@ class ImageCompressor {
         break;
         
       case 'png':
+        const pngCompressionLevel = this.speedOptimized ? 6 : 9;
+        const shouldUsePalette = quality < 90 || this.speedOptimized;
+        
         compressionOptions = {
-          quality,
-          progressive: false,
-          compressionLevel: this.speedOptimized ? 3 : 9,
+          compressionLevel: pngCompressionLevel,
           adaptiveFiltering: !this.skipOptimizations,
-          palette: quality < 90 && !this.speedOptimized
+          palette: shouldUsePalette,
+          quality: Math.min(quality, 95),
+          progressive: false
         };
         
         if (sharpInstance._targetSize) {
@@ -146,35 +155,72 @@ class ImageCompressor {
     const targetSize = sharpInstance._targetSize;
     let quality = baseOptions.quality || 85;
     let attempts = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 15;
     
-    while (attempts < maxAttempts) {
-      const options = { ...baseOptions, quality };
+    if (format === 'png') {
+      let compressionLevel = baseOptions.compressionLevel || 9;
+      let usePalette = baseOptions.palette;
       
-      let buffer;
-      
-      switch (format) {
-        case 'jpeg':
-          buffer = await sharpInstance.jpeg(options).toBuffer();
+      while (attempts < maxAttempts) {
+        const options = { 
+          ...baseOptions, 
+          quality: Math.min(quality, 95),
+          compressionLevel,
+          palette: usePalette
+        };
+        
+        const buffer = await sharpInstance.png(options).toBuffer();
+        
+        if (buffer.length <= targetSize || quality <= 10) {
+          await fs.writeFile(outputPath, buffer);
           break;
-        case 'png':
-          buffer = await sharpInstance.png(options).toBuffer();
-          break;
-        case 'webp':
-          buffer = await sharpInstance.webp(options).toBuffer();
-          break;
-        case 'avif':
-          buffer = await sharpInstance.avif(options).toBuffer();
-          break;
+        }
+        
+        if (attempts < 5) {
+          quality = Math.max(10, quality - 15);
+        } else if (attempts < 10) {
+          usePalette = true;
+          compressionLevel = Math.min(9, compressionLevel + 1);
+        } else {
+          quality = Math.max(10, quality - 5);
+        }
+        
+        attempts++;
       }
-      
-      if (buffer.length <= targetSize || quality <= 10) {
-        await fs.writeFile(outputPath, buffer);
-        break;
+    } else {
+      while (attempts < maxAttempts) {
+        const options = { ...baseOptions, quality };
+        
+        let buffer;
+        
+        switch (format) {
+          case 'jpeg':
+            buffer = await sharpInstance.jpeg(options).toBuffer();
+            break;
+          case 'webp':
+            buffer = await sharpInstance.webp(options).toBuffer();
+            break;
+          case 'avif':
+            buffer = await sharpInstance.avif(options).toBuffer();
+            break;
+        }
+        
+        if (buffer.length <= targetSize || quality <= 10) {
+          await fs.writeFile(outputPath, buffer);
+          break;
+        }
+        
+        const compressionRatio = buffer.length / targetSize;
+        if (compressionRatio > 2) {
+          quality = Math.max(10, quality - 20);
+        } else if (compressionRatio > 1.5) {
+          quality = Math.max(10, quality - 15);
+        } else {
+          quality = Math.max(10, quality - 10);
+        }
+        
+        attempts++;
       }
-      
-      quality = Math.max(10, quality - 10);
-      attempts++;
     }
   }
 
@@ -196,7 +242,7 @@ class ImageCompressor {
       case '.avif':
         return 'avif';
       default:
-        return 'jpeg';
+        return 'png';
     }
   }
 

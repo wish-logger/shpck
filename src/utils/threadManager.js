@@ -177,9 +177,74 @@ class ThreadManager {
     });
   }
   
-  async processSingleThreaded(files, options) {     
-    const { compressCommand } = require('../commands/compress');
-    return compressCommand(files, { ...this.options, ...options, parallel: 1 });
+  async processSingleThreaded(files, options) {
+    const { ImageCompressor } = require('../compressors/imageCompressor');
+    const { VideoCompressor } = require('../compressors/videoCompressor');
+    const mime = require('mime-types');
+    
+    const imageCompressor = new ImageCompressor({
+      ...this.options,
+      ...options,
+      speedOptimized: options.ultrafast || false,
+      skipOptimizations: options.noOptimize || false
+    });
+    
+    const videoCompressor = new VideoCompressor({
+      ...this.options,
+      ...options,
+      speedOptimized: options.ultrafast || false,
+      skipOptimizations: options.noOptimize || false
+    });
+    
+    const results = {
+      processed: 0,
+      errors: [],
+      totalSizeReduction: 0,
+      processingTimes: []
+    };
+    
+    for (const file of files) {
+      try {
+        const startTime = Date.now();
+        const mimeType = mime.lookup(file);
+        
+        let result;
+        if (mimeType && mimeType.startsWith('image/')) {
+          result = await imageCompressor.compress(file, options);
+        } else if (mimeType && mimeType.startsWith('video/')) {
+          result = await videoCompressor.compress(file, options);
+        } else {
+          throw new Error(`Unsupported file type: ${mimeType || 'unknown'}`);
+        }
+        
+        const processingTime = Date.now() - startTime;
+        
+        results.processed++;
+        results.totalSizeReduction += (result.originalSize - result.compressedSize);
+        results.processingTimes.push(processingTime);
+        
+        if (!this.isQuiet) {
+          const reduction = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
+          console.log(
+            chalk.green(`✓`) +
+            ` ${path.basename(file)} ` +
+            chalk.gray(`-${reduction}%`)
+          );
+        }
+        
+      } catch (error) {
+        results.errors.push({
+          file,
+          error: error.message
+        });
+        
+        if (!this.isQuiet) {
+          console.log(chalk.red(`✗`) + ` ${path.basename(file)} - ${error.message}`);
+        }
+      }
+    }
+    
+    return results;
   }
   
   printPerformanceStats(results) {

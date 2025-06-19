@@ -201,30 +201,31 @@ async function analyzeOther(otherFiles, options) {
 
 function getImageCompressionEstimate(format, size) {
   const estimates = {
-    '.png': size > 1024 * 1024 ? 65 : 45, // Large PNGs compress better
-    '.jpg': 25,
-    '.jpeg': 25,
-    '.bmp': 85,
-    '.tiff': 70,
-    '.webp': 15, // Already compressed
-    '.gif': 35
+    '.png': size > 5 * 1024 * 1024 ? 35 : 25,
+    '.jpg': 15,
+    '.jpeg': 15,
+    '.bmp': 80,
+    '.tiff': 60,
+    '.webp': 5,
+    '.gif': 25,
+    '.avif': 3
   };
   
-  return estimates[format] || 30;
+  return estimates[format] || 20;
 }
 
 function getVideoCompressionEstimate(format, size) {
   const estimates = {
-    '.avi': 75,
-    '.mov': 65,
-    '.mkv': 45,
-    '.mp4': 35,
-    '.webm': 25,
-    '.wmv': 70,
-    '.flv': 80
+    '.avi': 60,
+    '.mov': 50,
+    '.mkv': 30,
+    '.mp4': 20,
+    '.webm': 15,
+    '.wmv': 55,
+    '.flv': 65
   };
   
-  return estimates[format] || 50;
+  return estimates[format] || 35;
 }
 
 function getImageRecommendations(format, size) {

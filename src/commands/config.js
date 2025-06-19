@@ -198,12 +198,10 @@ async function fileExists(filePath) {
 }
 
 function parseValue(value) {
-  // Try to parse as number
   if (!isNaN(value) && !isNaN(parseFloat(value))) {
     return parseFloat(value);
   }
   
-  // Try to parse as boolean
   if (value.toLowerCase() === 'true') {
     return true;
   }
@@ -211,7 +209,6 @@ function parseValue(value) {
     return false;
   }
   
-  // Return as string
   return value;
 }
 
@@ -229,7 +226,6 @@ function mergeWithDefaults(config) {
   return merged;
 }
 
-// Export for use by other modules
 async function getConfig() {
   return await loadConfig();
 }

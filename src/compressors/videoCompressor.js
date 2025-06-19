@@ -56,14 +56,33 @@ class VideoCompressor {
     if (options.targetSize) {
       const targetBytes = this.parseTargetSize(options.targetSize);
       const duration = metadata.format?.duration || 60;
-      const targetBitrate = Math.floor((targetBytes * 8) / duration / 1024);
       
-      command = command.videoBitrate(`${Math.max(100, targetBitrate)}k`);
+      const audioBitrate = 128;
+      const overheadFactor = 0.85;
+      const targetBitrate = Math.floor(((targetBytes * 8 * overheadFactor) / duration - audioBitrate * 1024) / 1024);
+      
+      const finalBitrate = Math.max(200, Math.min(targetBitrate, 50000));
+      
+      command = command.videoBitrate(`${finalBitrate}k`);
       command = command.audioBitrate('128k');
+      
+      if (targetBytes < 50 * 1024 * 1024) {
+        command = command.addOption('-pass', '1');
+      }
     } else if (options.bitrate) {
       command = command.videoBitrate(options.bitrate);
     } else {
       let quality = options.quality || 'medium';
+      
+      if (typeof quality === 'string' && !isNaN(quality)) {
+        const numQuality = parseInt(quality);
+        if (numQuality >= 90) quality = 'high';
+        else if (numQuality >= 75) quality = 'slow';
+        else if (numQuality >= 60) quality = 'medium';
+        else if (numQuality >= 40) quality = 'fast';
+        else quality = 'ultrafast';
+      }
+      
       if (this.speedOptimized) {
         quality = 'ultrafast';
       }
@@ -95,8 +114,7 @@ class VideoCompressor {
     if (this.speedOptimized) {
       command = command
         .addOption('-tune', 'zerolatency')
-        .addOption('-threads', '0')
-        .addOption('-cpu-used', '8');
+        .addOption('-threads', '0');
     }
     
     const outputFormat = this.getOutputFormat(outputPath);
@@ -111,11 +129,11 @@ class VideoCompressor {
 
   applyQualitySettings(command, quality, codec) {
     const settings = {
-      'ultrafast': { crf: 28, preset: 'ultrafast' },
-      'fast': { crf: 23, preset: 'fast' },
-      'medium': { crf: 20, preset: 'medium' },
-      'slow': { crf: 18, preset: 'slow' },
-      'high': { crf: 15, preset: 'slow' }
+      'ultrafast': { crf: 30, preset: 'ultrafast' },
+      'fast': { crf: 26, preset: 'fast' },
+      'medium': { crf: 23, preset: 'medium' },
+      'slow': { crf: 20, preset: 'slow' },
+      'high': { crf: 18, preset: 'veryslow' }
     };
     
     const setting = settings[quality] || settings.medium;
@@ -124,13 +142,17 @@ class VideoCompressor {
       command = command
         .addOption('-crf', setting.crf.toString())
         .addOption('-preset', setting.preset);
+        
+      if (codec === 'h265') {
+        command = command.addOption('-x265-params', 'log-level=error');
+      }
     } else {
       const bitrates = {
-        'ultrafast': '500k',
-        'fast': '1000k',
-        'medium': '1500k',
-        'slow': '2000k',
-        'high': '3000k'
+        'ultrafast': '800k',
+        'fast': '1200k',
+        'medium': '1800k',
+        'slow': '2500k',
+        'high': '4000k'
       };
       command = command.videoBitrate(bitrates[quality] || bitrates.medium);
     }
