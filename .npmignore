@@ -1,0 +1,37 @@
+# Development files
+node_modules/
+.git/
+.gitignore
+*.log
+*.tmp
+
+# Development configs
+.eslintrc*
+.prettierrc*
+nodemon.json
+jest.config.js
+
+# Documentation (keep README.md)
+QUICK_START.md
+examples/
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test files
+test/
+tests/
+__tests__/
+coverage/
+
+# Build artifacts
+dist/
+build/ 

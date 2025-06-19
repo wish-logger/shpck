@@ -1,13 +1,23 @@
 {
   "name": "shpck",
   "version": "1.0.0",
-  "description": "Wish Packer - Fast file compression tool for images, videos, and media files",
+  "description": "Ultra-fast, multi-threaded file compression tool for images, videos, and media files",
+  "homepage": "https://github.com/wish-logger/shpck",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wish-logger/shpck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wish-logger/shpck/issues"
+  },
   "main": "src/index.js",
   "bin": {
     "shpck": "./bin/shpck.js"
   },
   "scripts": {
     "start": "node src/index.js",
+    "install-global": "npm install -g .",
+    "uninstall-global": "npm uninstall -g shpck",
     "multi-thread-demo": "node examples/multi-thread-demo.js",
     "build": "node scripts/build.js",
     "test": "jest",
@@ -18,9 +28,16 @@
     "image-optimization",
     "video-compression",
     "file-packer",
-    "media-compression"
+    "media-compression",
+    "multi-threading",
+    "worker-threads",
+    "ultrafast",
+    "batch-processing",
+    "cli",
+    "sharp",
+    "ffmpeg"
   ],
-  "author": "shpck",
+  "author": "ImpulseDev",
   "license": "MIT",
   "dependencies": {
     "chalk": "^4.1.2",
