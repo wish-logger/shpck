@@ -10,7 +10,7 @@
   "bugs": {
     "url": "https://github.com/wish-logger/shpck/issues"
   },
-  "main": "src/index.js",
+  "main": "src/api.js",
   "bin": {
     "shpck": "./bin/shpck.js"
   },
