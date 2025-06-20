@@ -36,58 +36,11 @@ const { configCommand } = require('./commands/config');
 /**
  * Compress images, videos, and media files with advanced multi-threaded processing.
  * 
- * Supports formats:
- * - Images: JPG, PNG, WebP, AVIF, BMP, TIFF, GIF
- * - Videos: MP4, AVI, MOV, MKV, WebM, WMV, FLV
- * 
- * Features:
- * - Multi-threaded processing for large files and batches
- * - Intelligent compression strategies
- * - Target size optimization
- * - Format conversion and optimization
- * - Batch processing with progress tracking
  * 
  * @param {string|string[]} files - File path, directory path, or array of paths/patterns to compress
  * @param {CompressionOptions} [options] - Compression configuration options
  * @returns {Promise<CompressionResult>} Promise resolving to compression results with statistics
  * 
- * @example
- * // Basic compression with default settings
- * await shpck.compress('image.jpg');
- * 
- * @example
- * // Compress with specific quality and format
- * await shpck.compress('photo.png', {
- *   quality: 90,
- *   format: 'webp',
- *   output: './compressed/'
- * });
- * 
- * @example
- * // Target size compression
- * await shpck.compress('large-video.mp4', {
- *   targetSize: '50MB',
- *   strategy: 'size'
- * });
- * 
- * @example
- * // Multi-threaded batch processing
- * await shpck.compress(['folder1/', 'folder2/'], {
- *   recursive: true,
- *   multiThread: true,
- *   threads: 8,
- *   ultrafast: true
- * });
- * 
- * @example
- * // Video compression with specific codec
- * await shpck.compress('video.avi', {
- *   format: 'mp4',
- *   codec: 'h265',
- *   bitrate: '2M',
- *   width: 1920,
- *   height: 1080
- * });
  */
 async function compress(files, options) {
   return await compressCommand(Array.isArray(files) ? files : [files], options || {});
@@ -115,17 +68,7 @@ async function compress(files, options) {
  * @param {AnalysisOptions} [options] - Analysis configuration options
  * @returns {Promise<AnalysisResult>} Promise resolving to analysis results with estimates
  * 
- * @example
- * // Basic file analysis
- * const analysis = await shpck.analyze('photos/');
- * console.log(`Could save ${analysis.estimatedSavings} bytes`);
- * 
- * @example
- * // Detailed recursive analysis
- * await shpck.analyze(['images/', 'videos/'], {
- *   recursive: true,
- *   detailed: true
- * });
+
  */
 async function analyze(files, options) {
   return await analyzeCommand(Array.isArray(files) ? files : [files], options || {});
@@ -145,17 +88,7 @@ async function analyze(files, options) {
  * @param {ConfigOptions} [options] - Configuration management options
  * @returns {Promise<void>} Promise resolving when configuration operation completes
  * 
- * @example
- * // Initialize default config
- * await shpck.config({ init: true });
- * 
- * @example
- * // Show current settings
- * await shpck.config({ show: true });
- * 
- * @example
- * // Set default quality
- * await shpck.config({ set: 'quality=90' });
+
  */
 async function config(options) {
   return await configCommand(options || {});
