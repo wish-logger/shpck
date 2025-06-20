@@ -312,9 +312,9 @@ class VideoCompressor {
         }
       }
     } else {
-      const resolutions = isLargeVideo ? [0.5, 0.3, 0.2] : [1.0, 0.7, 0.5];
-      const crfs = isLargeVideo ? [32, 36, 40, 45] : [28, 32, 36, 40];
-      const presets = ['fast', 'medium'];
+      const resolutions = isLargeVideo ? [0.3, 0.2, 0.1] : [0.7, 0.5, 0.3];
+      const crfs = isLargeVideo ? [36, 40, 45] : [28, 32, 36];
+      const presets = ['fast'];
       const codecs = ['h264'];
       
       for (const codec of codecs) {
@@ -380,8 +380,8 @@ class VideoCompressor {
       }
       
       if (s.scale < 1.0) {
-        const w = Math.round((metadata.streams?.[0]?.width || 1920) * s.scale);
-        const h = Math.round((metadata.streams?.[0]?.height || 1080) * s.scale);
+        const w = Math.round(width * s.scale);
+        const h = Math.round(height * s.scale);
         command = command.size(`${w}x${h}`);
       }
       
@@ -471,8 +471,8 @@ class VideoCompressor {
       }
       
       if (bestResult.scale < 1.0) {
-        const w = Math.round((metadata.streams?.[0]?.width || 1920) * bestResult.scale);
-        const h = Math.round((metadata.streams?.[0]?.height || 1080) * bestResult.scale);
+        const w = Math.round(width * bestResult.scale);
+        const h = Math.round(height * bestResult.scale);
         command = command.size(`${w}x${h}`);
       }
       command = command.output(finalOutputPath);
