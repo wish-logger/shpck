@@ -779,32 +779,37 @@ class VideoCompressor {
   setupFFmpegPath() {
     try {
       const { execSync } = require('child_process');
-      
+      const fs = require('fs');
+      const path = require('path');
+      const ffmpeg = require('fluent-ffmpeg');
+
       try {
         execSync('ffmpeg -version', { stdio: 'ignore' });
-      } catch {
-        const commonPaths = [
-          'C:\\ffmpeg\\bin\\ffmpeg.exe',
-          'C:\\Program Files\\SteelSeries\\GG\\apps\\moments\\ffmpeg.exe',
-          '/usr/local/bin/ffmpeg',
-          '/usr/bin/ffmpeg',
-          '/opt/homebrew/bin/ffmpeg'
-        ];
-        
-        for (const ffmpegPath of commonPaths) {
-          try {
-            const fs = require('fs');
-            if (fs.existsSync(ffmpegPath)) {
-              ffmpeg.setFfmpegPath(ffmpegPath);
-              if (ffmpegPath.includes('SteelSeries')) {
-                ffmpeg.setFfprobePath(ffmpegPath);
-              }
-              break;
-            }
-          } catch {
-          }
+        execSync('ffprobe -version', { stdio: 'ignore' });
+        return;
+      } catch {}
+
+      const possibleDirs = [
+        'C:\\ffmpeg\\bin',
+        'C:\\Program Files\\ffmpeg\\bin',
+        'C:\\Program Files (x86)\\ffmpeg\\bin',
+        path.join(process.env.USERPROFILE || '', 'Desktop', 'ffmpeg-7.1.1-essentials_build', 'bin'),
+        'C:\\Program Files\\SteelSeries\\GG\\apps\\moments',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/opt/homebrew/bin'
+      ];
+
+      for (const dir of possibleDirs) {
+        const ffmpegPath = path.join(dir, 'ffmpeg.exe');
+        const ffprobePath = path.join(dir, 'ffprobe.exe');
+        if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
+          ffmpeg.setFfmpegPath(ffmpegPath);
+          ffmpeg.setFfprobePath(ffprobePath);
+          return;
         }
       }
+      console.warn('Warning: FFmpeg/ffprobe not found in PATH or common locations. Please install or add to PATH.');
     } catch (error) {
       console.warn('Warning: FFmpeg path detection failed. Please ensure FFmpeg is installed and accessible.');
     }
