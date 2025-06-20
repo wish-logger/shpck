@@ -789,27 +789,52 @@ class VideoCompressor {
         return;
       } catch {}
 
-      const possibleDirs = [
+      const commonDirs = [
         'C:\\ffmpeg\\bin',
+        'C:\\Program Files\\SteelSeries\\GG\\apps\\moments',
         'C:\\Program Files\\ffmpeg\\bin',
         'C:\\Program Files (x86)\\ffmpeg\\bin',
         path.join(process.env.USERPROFILE || '', 'Desktop', 'ffmpeg-7.1.1-essentials_build', 'bin'),
-        'C:\\Program Files\\SteelSeries\\GG\\apps\\moments',
         '/usr/local/bin',
         '/usr/bin',
         '/opt/homebrew/bin'
       ];
 
-      for (const dir of possibleDirs) {
-        const ffmpegPath = path.join(dir, 'ffmpeg.exe');
-        const ffprobePath = path.join(dir, 'ffprobe.exe');
-        if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
-          ffmpeg.setFfmpegPath(ffmpegPath);
-          ffmpeg.setFfprobePath(ffprobePath);
-          return;
+      let found = false;
+      for (const dir of commonDirs) {
+        try {
+          const ffmpegPath = path.join(dir, 'ffmpeg.exe');
+          const ffprobePath = path.join(dir, 'ffprobe.exe');
+          if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
+            ffmpeg.setFfmpegPath(ffmpegPath);
+            ffmpeg.setFfprobePath(ffprobePath);
+            found = true;
+            break;
+          }
+        } catch {}
+      }
+
+      if (!found && process.platform === 'win32') {
+        try {
+          const { execSync } = require('child_process');
+          const ffmpegList = execSync('where /R C:\\ ffmpeg*.exe', { encoding: 'utf8' })
+            .split(/\r?\n/)
+            .filter(Boolean);
+          const ffprobeList = execSync('where /R C:\\ ffprobe*.exe', { encoding: 'utf8' })
+            .split(/\r?\n/)
+            .filter(Boolean);
+          if (ffmpegList.length > 0 && ffprobeList.length > 0) {
+            ffmpeg.setFfmpegPath(ffmpegList[0]);
+            ffmpeg.setFfprobePath(ffprobeList[0]);
+            found = true;
+          }
+        } catch (e) {
         }
       }
-      console.warn('Warning: FFmpeg/ffprobe not found in PATH or common locations. Please install or add to PATH.');
+
+      if (!found) {
+        console.warn('Warning: FFmpeg/ffprobe not found in PATH or common locations. Please install or add to PATH.');
+      }
     } catch (error) {
       console.warn('Warning: FFmpeg path detection failed. Please ensure FFmpeg is installed and accessible.');
     }
