@@ -97,7 +97,7 @@ class VideoCompressor {
         this.parseTargetSize(options.targetSize) : 
         options.targetSize;
       
-      if ((targetBytes / originalSize) < 0.05) {
+      if ((targetBytes / originalSize) < 0.15) {
         finalOutputPath = await this.extremeCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetBytes);
       } else {
         finalOutputPath = await this.standardCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetBytes);
@@ -163,6 +163,8 @@ class VideoCompressor {
     if (!this.isFFmpegLimited) {
       const preset = this.speedOptimized ? 'ultrafast' : 'fast';
       command = command.addOption('-preset', preset);
+    } else if (this.speedOptimized) {
+      command = command.addOption('-rc', 'constqp');
     }
     
     command = command
@@ -204,6 +206,9 @@ class VideoCompressor {
     const setting = settings[quality] || settings.medium;
     if (codec === 'h264' || codec === 'h265') {
       command = command.addOption('-crf', setting.crf.toString());
+      if (!this.isFFmpegLimited) {
+        command = command.addOption('-preset', setting.preset);
+      }
       if (codec === 'h265') {
         command = command.addOption('-x265-params', 'log-level=error');
       }
@@ -280,30 +285,52 @@ class VideoCompressor {
 
   async extremeCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetSize) {
     if (!this.options.skip) {
-      console.log('🚀 EXTREME VIDEO COMPRESSION MODE: parallel strategies...');
+      console.log('🚀 EXTREME VIDEO COMPRESSION MODE: testing strategies sequentially...');
     }
+    
     const duration = metadata.format?.duration || 60;
-    const resolutions = [1.0, 0.7, 0.5, 0.3];
-    const crfs = [18, 23, 28, 32, 36, 40, 45, 50];
-    const presets = ['ultrafast', 'fast', 'medium'];
-    const codecs = ['h264', 'h265', 'vp9', 'av1'];
+    
     let strategies = [];
-    for (const codec of codecs) {
-      for (const preset of presets) {
-        for (const crf of crfs) {
+    
+    if (this.isFFmpegLimited) {
+      const resolutions = [1.0, 0.7, 0.5];
+      const bitrates = ['800k', '600k', '400k', '200k'];
+      const codecs = ['h264_nvenc'];
+      
+      for (const codec of codecs) {
+        for (const bitrate of bitrates) {
           for (const scale of resolutions) {
-            strategies.push({ codec, preset, crf, scale });
+            strategies.push({ codec, bitrate, scale, preset: 'fast' });
+          }
+        }
+      }
+    } else {
+      const resolutions = [1.0, 0.7, 0.5];
+      const crfs = [28, 32, 36, 40];
+      const presets = ['fast', 'medium'];
+      const codecs = ['h264'];
+      
+      for (const codec of codecs) {
+        for (const preset of presets) {
+          for (const crf of crfs) {
+            for (const scale of resolutions) {
+              strategies.push({ codec, preset, crf, scale });
+            }
           }
         }
       }
     }
+    
     let bestResult = null;
-    const tempOut = outputPath.replace(/\.[^.]+$/, '_extreme_test.mp4');
+    const baseName = path.basename(inputFile, path.extname(inputFile));
     
     for (let i = 0; i < strategies.length; i++) {
       const s = strategies[i];
+      
+      const tempOut = outputPath.replace(/\.[^.]+$/, `_extreme_${i}.mp4`);
+      
       if (!this.options.skip) {
-        console.log(`🧪 Testing strategy ${i+1}/${strategies.length}: ${s.codec} CRF${s.crf} ${s.preset} ${(s.scale*100)}%`);
+        console.log(`🧪 Testing strategy ${i+1}/${strategies.length}: ${s.codec} ${s.crf ? `CRF${s.crf}` : s.bitrate} ${s.preset} ${(s.scale*100)}%`);
       }
       
       let command = require('fluent-ffmpeg')(inputFile)
@@ -313,20 +340,21 @@ class VideoCompressor {
         .addOption('-movflags', 'faststart')
         .addOption('-pix_fmt', 'yuv420p');
       
-      if (this.isFFmpegLimited) {
-        const bitrates = { ultrafast: '800k', fast: '1200k', medium: '1800k' };
-        command = command.videoBitrate(bitrates[s.preset] || '1200k');
+      if (this.isFFmpegLimited || s.bitrate) {
+        command = command.videoBitrate(s.bitrate || '1200k');
       } else {
-        command = command
-          .addOption('-crf', s.crf.toString())
-          .addOption('-preset', s.preset);
+        command = command.addOption('-crf', s.crf.toString());
+        if (!s.codec.includes('nvenc')) {
+          command = command.addOption('-preset', s.preset);
+        }
       }
-      if (s.codec === 'av1') command = command.addOption('-cpu-used', '8');
+      
       if (s.scale < 1.0) {
         const w = Math.round((metadata.streams?.[0]?.width || 1920) * s.scale);
         const h = Math.round((metadata.streams?.[0]?.height || 1080) * s.scale);
         command = command.size(`${w}x${h}`);
       }
+      
       command = command.output(tempOut);
       
       try {
@@ -340,6 +368,12 @@ class VideoCompressor {
         
         if (stats.size <= targetSize) {
           bestResult = result;
+          for (let j = 0; j < i; j++) {
+            try { 
+              const oldTemp = outputPath.replace(/\.[^.]+$/, `_extreme_${j}.mp4`);
+              await fs.unlink(oldTemp); 
+            } catch {}
+          }
           break;
         } else {
           try { await fs.unlink(tempOut); } catch {}
@@ -356,11 +390,12 @@ class VideoCompressor {
         continue;
       }
     }
-        if (!bestResult) {
+    
+    if (!bestResult) {
       throw new Error('No compression strategy succeeded');
     }
     
-    const finalExt = this.getExtensionForFormat(bestResult.codec === 'vp9' ? 'webm' : bestResult.codec === 'av1' ? 'mkv' : 'mp4');
+    const finalExt = this.getExtensionForFormat('mp4');
     const finalOutputPath = outputPath.replace(/\.[^.]+$/, finalExt);
     
     if (bestResult.tempPath && require('fs').existsSync(bestResult.tempPath)) {
@@ -377,16 +412,15 @@ class VideoCompressor {
         .addOption('-movflags', 'faststart')
         .addOption('-pix_fmt', 'yuv420p');
       
-      if (this.isFFmpegLimited) {
-        const bitrates = { ultrafast: '800k', fast: '1200k', medium: '1800k' };
-        command = command.videoBitrate(bitrates[bestResult.preset] || '1200k');
+      if (this.isFFmpegLimited || bestResult.bitrate) {
+        command = command.videoBitrate(bestResult.bitrate || '1200k');
       } else {
-        command = command
-          .addOption('-crf', bestResult.crf.toString())
-          .addOption('-preset', bestResult.preset);
+        command = command.addOption('-crf', bestResult.crf.toString());
+        if (!bestResult.codec.includes('nvenc')) {
+          command = command.addOption('-preset', bestResult.preset);
+        }
       }
       
-      if (bestResult.codec === 'av1') command = command.addOption('-cpu-used', '8');
       if (bestResult.scale < 1.0) {
         const w = Math.round((metadata.streams?.[0]?.width || 1920) * bestResult.scale);
         const h = Math.round((metadata.streams?.[0]?.height || 1080) * bestResult.scale);
@@ -400,9 +434,9 @@ class VideoCompressor {
       const targetMB = (targetSize / (1024*1024)).toFixed(2);
       const resultMB = ((bestResult.size || 0) / (1024*1024)).toFixed(2);
       if (bestResult.size <= targetSize) {
-        console.log(`🎯 Extreme: Target achieved! ${resultMB}MB (${bestResult.codec}, crf=${bestResult.crf}, preset=${bestResult.preset}, scale=${bestResult.scale})`);
+        console.log(`🎯 Extreme: Target achieved! ${resultMB}MB (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
       } else {
-        console.log(`⚠️ Extreme: Best effort ${resultMB}MB of ${targetMB}MB target (${bestResult.codec}, crf=${bestResult.crf}, preset=${bestResult.preset}, scale=${bestResult.scale})`);
+        console.log(`⚠️ Extreme: Best effort ${resultMB}MB of ${targetMB}MB target (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
       }
     }
     
