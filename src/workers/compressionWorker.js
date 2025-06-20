@@ -40,11 +40,11 @@ if (!isMainThread) {
           } else {
             const isImage = /\.(jpg|jpeg|png|webp|avif|bmp|tiff)$/i.test(file);
             const isVideo = /\.(mp4|avi|mov|mkv|webm|flv|wmv)$/i.test(file);
-            if (isImage) {
-              result = await imageCompressor.compress(file, options);
-            } else if (isVideo) {
-              result = await videoCompressor.compress(file, options);
-            } else {
+          if (isImage) {
+            result = await imageCompressor.compress(file, options);
+          } else if (isVideo) {
+            result = await videoCompressor.compress(file, options);
+          } else {
               throw new Error(`Unsupported file type: ${typeof file === 'string' ? path.extname(file) : 'fragment'}`);
             }
           }

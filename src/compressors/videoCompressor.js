@@ -129,11 +129,13 @@ class VideoCompressor {
     const codec = options.codec || 'h264';
     command = command.videoCodec(this.getVideoCodec(codec));
     command = command.audioCodec(this.getAudioCodec());
+    
     if (options.bitrate) {
       command = command.videoBitrate(options.bitrate);
     } else {
       let quality = options.quality || 'medium';
-      if (typeof quality === 'string' && !isNaN(quality)) {
+      
+      if (typeof quality === 'number' || (typeof quality === 'string' && !isNaN(quality))) {
         const numQuality = parseInt(quality);
         if (numQuality >= 90) quality = 'high';
         else if (numQuality >= 75) quality = 'slow';
@@ -141,17 +143,21 @@ class VideoCompressor {
         else if (numQuality >= 40) quality = 'fast';
         else quality = 'ultrafast';
       }
-      if (this.speedOptimized) {
+      
+      if (this.speedOptimized && !options.quality) {
         quality = 'ultrafast';
       }
+      
       command = this.applyQualitySettings(command, quality, codec);
     }
+    
     if (options.width && options.height) {
       command = command.size(`${options.width}x${options.height}`);
     } else if (options.width || options.height) {
       const currentWidth = metadata.streams?.[0]?.width || 1920;
       const currentHeight = metadata.streams?.[0]?.height || 1080;
       const aspectRatio = currentWidth / currentHeight;
+      
       if (options.width) {
         const newHeight = Math.round(options.width / aspectRatio);
         command = command.size(`${options.width}x${newHeight}`);
@@ -160,8 +166,14 @@ class VideoCompressor {
         command = command.size(`${newWidth}x${options.height}`);
       }
     }
+
     if (!this.isFFmpegLimited) {
-      const preset = this.speedOptimized ? 'ultrafast' : 'fast';
+      let preset = 'fast';
+      if (this.speedOptimized) {
+        preset = 'ultrafast';
+      } else if (options.quality && parseInt(options.quality) >= 90) {
+        preset = 'slow';
+      }
       command = command.addOption('-preset', preset);
     } else if (this.speedOptimized) {
       command = command.addOption('-rc', 'constqp');
@@ -170,17 +182,20 @@ class VideoCompressor {
     command = command
       .addOption('-movflags', this.skipOptimizations ? '' : 'faststart')
       .addOption('-pix_fmt', 'yuv420p')
-      .addOption('-threads', '0');
+      .addOption('-threads', options.threads || '0');
+      
     if (this.speedOptimized) {
       command = command
         .addOption('-tune', 'zerolatency');
     }
+    
     const outputFormat = this.getOutputFormat(outputPath);
     if (outputFormat === 'mp4') {
       command = command
         .addOption('-f', 'mp4')
         .addOption('-avoid_negative_ts', 'make_zero');
     }
+    
     return command.output(outputPath);
   }
 

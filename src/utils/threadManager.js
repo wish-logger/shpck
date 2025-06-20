@@ -14,28 +14,34 @@ class ThreadManager {
   
   calculateOptimalThreads() {
     const totalCores = os.cpus().length;
-    if (this.options.threads && this.options.ultrafast) {
-      this.threadCount = Math.max(2, Math.min(parseInt(this.options.threads) * 4, 32));
-    } else if (this.options.threads) {
-      this.threadCount = Math.max(2, Math.min(parseInt(this.options.threads) * 2, 32));
+    
+    if (this.options.threads) {
+      const baseThreads = parseInt(this.options.threads);
+      if (this.options.ultrafast) {
+        this.threadCount = Math.max(2, Math.min(Math.ceil(baseThreads * 1.5), 32));
+      } else {
+        this.threadCount = Math.max(2, Math.min(baseThreads, 32));
+      }
     } else if (this.options.ultrafast) {
-      this.threadCount = Math.max(2, Math.min(totalCores * 4, 32));
-    } else {
       this.threadCount = Math.max(2, Math.min(totalCores * 2, 32));
+    } else {
+      this.threadCount = Math.max(2, Math.min(Math.ceil(totalCores * 1.5), 32));
     }
+    
     if (!this.isQuiet) {
       console.log(chalk.gray(`🧵 Thread Manager: ${totalCores} CPU cores detected`));
       if (this.options.threads && this.options.ultrafast) {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (4x per thread, threads + ultrafast mode)`));
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (1.5x specified threads, ultrafast mode)`));
       } else if (this.options.threads) {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (2x per thread, threads)`));
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (specified threads)`));
       } else if (this.options.ultrafast) {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (4x per core, ultrafast mode)`));
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (2x per core, ultrafast mode)`));
       } else {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (2x per core)`));
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (1.5x per core)`));
       }
-      if (this.threadCount > totalCores * 1.5) {
-        console.log(chalk.yellow(`⚠️  Warning: Over-subscription detected (${this.threadCount} workers > ${totalCores} cores)`));
+      
+      if (this.threadCount > totalCores * 2) {
+        console.log(chalk.yellow(`⚠️  Warning: High thread count detected (${this.threadCount} workers > ${totalCores * 2} optimal)`));
       }
     }
   }
@@ -68,7 +74,7 @@ class ThreadManager {
     if (files.length === 0) {
       return { processed: 0, errors: [], totalSizeReduction: 0 };
     }
-
+    
     let filesToProcess = files;
     if (options.forceThreads) {
       const { splitLargeImagesIntoFragments } = require('./threadManager_imageFragmentation');
@@ -81,7 +87,7 @@ class ThreadManager {
       }
       return this.processSingleThreaded(filesToProcess, options);
     }
-
+    
     const chunks = this.chunkFiles(filesToProcess);
     const results = {
       processed: 0,
@@ -89,11 +95,11 @@ class ThreadManager {
       totalSizeReduction: 0,
       processingTimes: []
     };
-
+    
     if (!this.isQuiet) {
       console.log(chalk.cyan(`🚀 Starting multi-threaded compression with ${chunks.length} workers...`));
     }
-
+    
     try {
       await this.executeWorkers(chunks, options, results);
     } catch (error) {
@@ -104,11 +110,11 @@ class ThreadManager {
     } finally {
       await this.cleanup();
     }
-
+    
     if (!this.isQuiet) {
       this.printPerformanceStats(results);
     }
-
+    
     return results;
   }
   
@@ -294,4 +300,4 @@ class ThreadManager {
   }
 }
 
-module.exports = { ThreadManager };
+module.exports = { ThreadManager }; 

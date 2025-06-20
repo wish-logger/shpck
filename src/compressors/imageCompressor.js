@@ -115,7 +115,7 @@ class ImageCompressor {
       if (quality > 95) {
         quality = 90;
       }
-    } else if (this.speedOptimized) {
+    } else if (this.speedOptimized && !options.quality) {
       quality = Math.min(quality, 70);
     }
     

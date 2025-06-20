@@ -19,6 +19,27 @@ async function compressCommand(files, options) {
   const spinner = !isQuiet ? ora('Initializing compression...').start() : null;
   
   try {
+    if (options.quality !== undefined) {
+      const quality = parseInt(options.quality);
+      if (isNaN(quality) || quality < 1 || quality > 100) {
+        throw new Error('Quality must be a number between 1 and 100');
+      }
+    }
+    
+    if (options.threads !== undefined) {
+      const threads = parseInt(options.threads);
+      if (isNaN(threads) || threads < 1) {
+        throw new Error('Threads must be a positive number');
+      }
+    }
+    
+    if (options.targetSize && typeof options.targetSize === 'string') {
+      const targetSizeRegex = /^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)?$/i;
+      if (!targetSizeRegex.test(options.targetSize)) {
+        throw new Error('Target size must be in format like "4MB", "500KB", "1GB"');
+      }
+    }
+
     const resolvedFiles = await resolveFiles(files, options.recursive);
     
     if (resolvedFiles.length === 0) {
@@ -28,6 +49,31 @@ async function compressCommand(files, options) {
       }
       spinner.fail(chalk.red('No files found matching the pattern'));
       return;
+    }
+
+    if (options.targetSize && resolvedFiles.length === 1) {
+      try {
+        const fileStats = await fs.stat(resolvedFiles[0]);
+        const originalSize = fileStats.size;
+        
+        const match = options.targetSize.toString().match(/^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)?$/i);
+        if (match) {
+          const value = parseFloat(match[1]);
+          const unit = (match[2] || 'B').toUpperCase();
+          const multipliers = { 'B': 1, 'KB': 1024, 'MB': 1024 * 1024, 'GB': 1024 * 1024 * 1024 };
+          const targetBytes = Math.floor(value * multipliers[unit]);
+          
+          if (targetBytes >= originalSize) {
+            const originalSizeMB = (originalSize / (1024 * 1024)).toFixed(2);
+            const targetSizeMB = (targetBytes / (1024 * 1024)).toFixed(2);
+            throw new Error(`Target size (${targetSizeMB}MB) must be smaller than original file (${originalSizeMB}MB)`);
+          }
+        }
+      } catch (error) {
+        if (error.message.includes('Target size')) {
+          throw error;
+        }
+      }
     }
 
     if (!isQuiet) {

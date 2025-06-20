@@ -2,7 +2,9 @@
 
 **Ultra-fast, multi-threaded file compression tool for images, videos, and media files**
 
-SHPCK (Wish Packer) is a high-performance compression tool designed to dramatically reduce file sizes while maintaining quality. Built with speed in mind, featuring multi-threading, worker threads, and intelligent auto-optimization for maximum performance.
+SHPCK (Wish Packer) is a high-performance compression tool designed to dramatically reduce file sizes while maintaining quality. Built with speed in mind, featuring multi-threading, worker threads, and intelligent auto-optimization for maximum performance. 
+
+**Built specifically for [Wish Logger](https://wishlogger.xyz/) - a Discord logging bot that requires efficient compression of user-uploaded files & videos**
 
 ## ✨ Features
 
@@ -23,10 +25,14 @@ SHPCK (Wish Packer) is a high-performance compression tool designed to dramatica
 ### Installation
 
 ```bash
+# Global installation (CLI usage)
 npm install -g shpck
+
+# Local installation (API usage with TypeScript support)
+npm install shpck
 ```
 
-### Basic Usage
+### Basic Usage (CLI)
 
 ```bash
 # Compress a single image
@@ -40,6 +46,26 @@ shpck compress huge-video-5GB.mp4 --target-size 200MB
 
 # Speed demon mode (maximum performance)
 shpck compress *.* --ultrafast --no-optimize --threads 16 -s
+```
+
+### Basic Usage (API)
+
+```javascript
+const { compress } = require('shpck');
+
+// Simple compression
+await compress(['image.jpg'], {
+  quality: 80,
+  output: 'compressed.jpg'
+});
+
+// Advanced compression with threading
+await compress(['video.mp4'], {
+  ultrafast: true,
+  threads: 4,
+  targetSize: '4MB',
+  skip: true // quiet mode
+});
 ```
 
 ## ⚡ Speed & Performance Features
@@ -111,8 +137,9 @@ shpck compress "*.{jpg,png,mp4,avi}" --ultrafast --no-optimize --threads 16 -s
 ## 🧵 Multi-Threading Performance
 
 ### System Optimization
-- **Auto-detection**: Uses 50% of CPU cores × 2 workers in ultra-fast mode
-- **Conservative**: 75% of CPU cores for normal mode
+- **Auto-detection**: Uses optimal thread count based on CPU cores
+- **Conservative**: 1.5x CPU cores for normal mode
+- **Ultra-fast**: 2x CPU cores for speed mode
 - **Over-subscription warning**: Alerts when worker count exceeds optimal
 - **Memory monitoring**: Warns about high RAM usage (>85%)
 - **Disk I/O detection**: Identifies HDD vs SSD for optimization
@@ -120,9 +147,9 @@ shpck compress "*.{jpg,png,mp4,avi}" --ultrafast --no-optimize --threads 16 -s
 ### Example Performance (12-core system)
 ```bash
 # System detected: 12 cores, 16GB RAM
-# Conservative Mode: 9 threads
-# Ultra-Fast Mode: 12 threads  
-# Aggressive Mode: 24 threads (with warnings)
+# Normal Mode: ~18 threads
+# Ultra-Fast Mode: ~24 threads  
+# Custom: --threads 16 (user specified)
 ```
 
 ### Speed Improvements
@@ -130,6 +157,74 @@ shpck compress "*.{jpg,png,mp4,avi}" --ultrafast --no-optimize --threads 16 -s
 - **Normal → Speed Demon**: 4-8x faster  
 - **Large batches**: 10-20x faster with multi-threading
 - **Single large files**: 8-12x faster with worker threads
+
+## 📋 Installation Options
+
+| Method | CLI Access | TypeScript | IntelliSense | Use Case |
+|--------|------------|------------|--------------|----------|
+| `npm install -g shpck` | ✅ `shpck compress` | ❌ | ❌ | Command line only |
+| `npm install shpck` | ❌ | ✅ | ✅ | API development |
+| `npx shpck` | ✅ `npx shpck compress` | ✅ | ✅ | Best of both |
+
+### For API Development
+
+```bash
+# Install locally for TypeScript support
+npm install shpck
+```
+
+```javascript
+// Full TypeScript support and IntelliSense
+import shpck from 'shpck';
+
+await shpck.compress(['input.jpg'], {
+  quality: 100,        // ✅ Type checked
+  ultrafast: true,     // ✅ Autocomplete
+  threads: 4,          // ✅ Parameter hints
+  targetSize: '4MB',   // ✅ Format validation
+  skip: true           // ✅ Documentation
+});
+```
+
+## 🔧 API Reference
+
+### Compression Options
+
+```typescript
+interface CompressionOptions {
+  quality?: number;          // 1-100, image/video quality
+  ultrafast?: boolean;       // Speed optimization mode
+  output?: string;           // Output file path
+  threads?: number;          // Worker thread count
+  skip?: boolean;            // Quiet mode (no logs)
+  forceThreads?: boolean;    // Force multi-threading
+  targetSize?: string;       // Target file size (e.g., "4MB")
+  format?: string;           // Output format (auto, jpg, mp4, etc.)
+  strategy?: 'auto' | 'size' | 'quality' | 'speed';
+  codec?: 'h264' | 'h265' | 'vp9' | 'av1';
+  bitrate?: string;          // Video bitrate (e.g., "2M")
+  width?: number;            // Target width
+  height?: number;           // Target height
+  recursive?: boolean;       // Process directories
+  overwrite?: boolean;       // Overwrite existing files
+}
+```
+
+### API Methods
+
+```javascript
+// Compress files
+const result = await shpck.compress(files, options);
+console.log(`Processed: ${result.processed}`);
+console.log(`Saved: ${result.totalSizeReduction} bytes`);
+
+// Analyze files (estimate compression)
+const analysis = await shpck.analyze(files, options);
+console.log(`Potential savings: ${analysis.estimatedSavings} bytes`);
+
+// Manage configuration
+await shpck.config({ init: true });
+```
 
 ## ⚙️ Configuration
 
@@ -162,77 +257,6 @@ Create a `.shpckrc.json` file for default settings:
 }
 ```
 
-## 🔧 API Usage
-
-### TypeScript & IntelliSense Support
-
-SHPCK includes full TypeScript definitions for excellent developer experience:
-
-```bash
-# For CLI usage (global)
-npm install -g shpck
-
-# For API usage with IntelliSense (local)
-npm install shpck
-```
-
-**Installation Options:**
-
-| Method | CLI Access | IntelliSense | Use Case |
-|--------|------------|--------------|----------|
-| `npm install -g shpck` | ✅ `shpck compress` | ⚠️ Limited | Command line usage |
-| `npm install shpck` | ❌ No CLI | ✅ Full support | API/project integration |
-| `npx shpck` | ✅ `npx shpck compress` | ✅ Full support | Best of both worlds |
-
-**IntelliSense Features:**
-- ✅ **Full autocomplete** for all compression options
-- ✅ **Parameter descriptions** and examples  
-- ✅ **Type checking** for safer code
-- ✅ **JSDoc comments** with detailed explanations
-- ✅ **Union types** for strategy, codec, format options
-
-### Local Installation Usage
-
-If you installed locally (`npm install shpck`), use one of these methods:
-
-```bash
-# Option 1: Use npx (recommended)
-npx shpck compress image.jpg --quality 90
-
-# Option 2: Add to package.json scripts
-# In package.json: "scripts": { "compress": "shpck compress" }
-npm run compress image.jpg --quality 90
-
-# Option 3: Use the API (best for projects)
-```
-
-```javascript
-import shpck from 'shpck';
-
-// Ultra-fast image compression
-await shpck.compress(['input.jpg'], {
-  quality: 80,
-  ultrafast: true,
-  threads: 8,
-  output: 'output.jpg'
-});
-
-// Multi-threaded video compression
-await shpck.compress(['input.mp4'], {
-  targetSize: '200MB',
-  threads: 12,
-  speedOptimized: true,
-  output: 'output.mp4'
-});
-
-// Batch processing with worker threads (quiet mode)
-await shpck.compress(['*.jpg', '*.png'], {
-  ultrafast: true,
-  threads: 16,
-  noOptimize: true,
-  skip: true // enables quiet mode/log suppression
-});
-
 ## 📊 Performance Benchmarks
 
 ### Speed Comparisons
@@ -255,7 +279,7 @@ await shpck.compress(['*.jpg', '*.png'], {
 - **SSD Storage**: Recommended for large batch operations
 - **RAM**: 8GB+ recommended for large file processing
 
-### Installation Dependencies
+### FFmpeg Installation
 ```bash
 # Windows (via Chocolatey)
 choco install ffmpeg
@@ -277,13 +301,16 @@ sudo apt install ffmpeg
 - `--force-threads`: Multi-thread even small batches
 - `-s, --skip`: Quiet mode (minimal output)
 
-### Performance Monitoring
+### Common Patterns
 ```bash
-# View system capabilities
-npm run multi-thread-demo
+# Discord bot optimized (high speed, good quality)
+shpck compress attachment.jpg --quality 80 --ultrafast --threads 4 -s
 
-# Monitor during compression
-shpck compress large-batch/*.* --ultrafast --threads 16
+# Batch processing (maximum speed)
+shpck compress uploads/*.* --ultrafast --no-optimize --threads 8 -s
+
+# Size targeting (space optimization)
+shpck compress video.mp4 --target-size 8MB --codec h264
 ```
 
 ## 🚨 Performance Tips
@@ -292,13 +319,13 @@ shpck compress large-batch/*.* --ultrafast --threads 16
 - **4-8 core systems**: `--threads 6 --ultrafast`
 - **12+ core systems**: `--threads 16 --ultrafast --no-optimize`
 - **Large files (>3GB)**: Auto-enabled multi-threading
-- **Batch processing**: Use `--ultrafast --no-optimize -s`
+- **Discord bot usage**: `--ultrafast --threads 4 -s`
 
 ### Potential Issues
 - **Over-subscription**: Too many threads may slow performance
 - **I/O Bottleneck**: HDD may limit speed with many parallel operations
 - **Memory Usage**: Large files × many threads = high RAM usage
-- **CPU Binding**: OS handles core assignment automatically
+- **Target size validation**: Tool prevents impossible compression ratios
 
 ## 📝 License
 
