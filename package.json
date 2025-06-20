@@ -1,6 +1,6 @@
 {
   "name": "shpck",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Ultra-fast, multi-threaded file compression tool for images, videos, and media files",
   "homepage": "https://github.com/wish-logger/shpck",
   "repository": {
