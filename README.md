@@ -164,6 +164,48 @@ Create a `.shpckrc.json` file for default settings:
 
 ## 🔧 API Usage
 
+### TypeScript & IntelliSense Support
+
+SHPCK includes full TypeScript definitions for excellent developer experience:
+
+```bash
+# For CLI usage (global)
+npm install -g shpck
+
+# For API usage with IntelliSense (local)
+npm install shpck
+```
+
+**Installation Options:**
+
+| Method | CLI Access | IntelliSense | Use Case |
+|--------|------------|--------------|----------|
+| `npm install -g shpck` | ✅ `shpck compress` | ⚠️ Limited | Command line usage |
+| `npm install shpck` | ❌ No CLI | ✅ Full support | API/project integration |
+| `npx shpck` | ✅ `npx shpck compress` | ✅ Full support | Best of both worlds |
+
+**IntelliSense Features:**
+- ✅ **Full autocomplete** for all compression options
+- ✅ **Parameter descriptions** and examples  
+- ✅ **Type checking** for safer code
+- ✅ **JSDoc comments** with detailed explanations
+- ✅ **Union types** for strategy, codec, format options
+
+### Local Installation Usage
+
+If you installed locally (`npm install shpck`), use one of these methods:
+
+```bash
+# Option 1: Use npx (recommended)
+npx shpck compress image.jpg --quality 90
+
+# Option 2: Add to package.json scripts
+# In package.json: "scripts": { "compress": "shpck compress" }
+npm run compress image.jpg --quality 90
+
+# Option 3: Use the API (best for projects)
+```
+
 ```javascript
 import shpck from 'shpck';
 
@@ -190,7 +232,6 @@ await shpck.compress(['*.jpg', '*.png'], {
   noOptimize: true,
   skip: true // enables quiet mode/log suppression
 });
-```
 
 ## 📊 Performance Benchmarks
 

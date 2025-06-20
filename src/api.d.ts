@@ -77,38 +77,36 @@ interface ConfigOptions {
   set?: string;
 }
 
-/**
- * Compress images, videos, and media files with advanced multi-threaded processing.
- * 
- * Supports formats:
- * - Images: JPG, PNG, WebP, AVIF, BMP, TIFF, GIF
- * - Videos: MP4, AVI, MOV, MKV, WebM, WMV, FLV
- * 
- * Features:
- * - Multi-threaded processing for large files and batches
- * - Intelligent compression strategies
- * - Target size optimization
- * - Format conversion and optimization
- * - Batch processing with progress tracking
- */
-export function compress(files: string | string[], options?: CompressionOptions): Promise<CompressionResult>;
 
-/**
- * Analyze files and estimate compression potential without actually compressing them.
- * Provides insights into file sizes, formats, and potential space savings.
- */
-export function analyze(files: string | string[], options?: AnalysisOptions): Promise<AnalysisResult>;
 
-/**
- * Manage shpck configuration settings. Set default compression options,
- * thread counts, and other preferences that persist across sessions.
- */
-export function config(options?: ConfigOptions): Promise<void>;
+declare namespace shpck {
+  /**
+   * Compress images, videos, and media files with advanced multi-threaded processing.
+   * 
+   * Supports formats:
+   * - Images: JPG, PNG, WebP, AVIF, BMP, TIFF, GIF
+   * - Videos: MP4, AVI, MOV, MKV, WebM, WMV, FLV
+   * 
+   * Features:
+   * - Multi-threaded processing for large files and batches
+   * - Intelligent compression strategies
+   * - Target size optimization
+   * - Format conversion and optimization
+   * - Batch processing with progress tracking
+   */
+  function compress(files: string | string[], options?: CompressionOptions): Promise<CompressionResult>;
+  
+  /**
+   * Analyze files and estimate compression potential without actually compressing them.
+   * Provides insights into file sizes, formats, and potential space savings.
+   */
+  function analyze(files: string | string[], options?: AnalysisOptions): Promise<AnalysisResult>;
+  
+  /**
+   * Manage shpck configuration settings. Set default compression options,
+   * thread counts, and other preferences that persist across sessions.
+   */
+  function config(options?: ConfigOptions): Promise<void>;
+}
 
-declare const shpck: {
-  compress: typeof compress;
-  analyze: typeof analyze;
-  config: typeof config;
-};
-
-export default shpck; 
+export = shpck; 
