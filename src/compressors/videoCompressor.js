@@ -97,7 +97,7 @@ class VideoCompressor {
         this.parseTargetSize(options.targetSize) : 
         options.targetSize;
       
-      if ((targetBytes / originalSize) < 0.15) {
+      if ((targetBytes / originalSize) < 0.05) {
         finalOutputPath = await this.extremeCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetBytes);
       } else {
         finalOutputPath = await this.standardCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetBytes);
@@ -297,8 +297,15 @@ class VideoCompressor {
         }
       }
     }
-    const results = await Promise.all(strategies.map(async (s, i) => {
-      const tempOut = outputPath.replace(/\.[^.]+$/, `_extreme${i}.${s.codec === 'vp9' ? 'webm' : s.codec === 'av1' ? 'mkv' : 'mp4'}`);
+    let bestResult = null;
+    const tempOut = outputPath.replace(/\.[^.]+$/, '_extreme_test.mp4');
+    
+    for (let i = 0; i < strategies.length; i++) {
+      const s = strategies[i];
+      if (!this.options.skip) {
+        console.log(`🧪 Testing strategy ${i+1}/${strategies.length}: ${s.codec} CRF${s.crf} ${s.preset} ${(s.scale*100)}%`);
+      }
+      
       let command = require('fluent-ffmpeg')(inputFile)
         .videoCodec(this.getVideoCodec(s.codec))
         .audioCodec(this.getAudioCodec())
@@ -321,33 +328,84 @@ class VideoCompressor {
         command = command.size(`${w}x${h}`);
       }
       command = command.output(tempOut);
+      
       try {
         await this.executeCompression(command);
         const stats = await fs.stat(tempOut);
-        return { ...s, tempPath: tempOut, size: stats.size };
+        const result = { ...s, tempPath: tempOut, size: stats.size };
+        
+        if (!this.options.skip) {
+          console.log(`📊 Result: ${(stats.size / (1024*1024)).toFixed(2)}MB (target: ${(targetSize / (1024*1024)).toFixed(2)}MB)`);
+        }
+        
+        if (stats.size <= targetSize) {
+          bestResult = result;
+          break;
+        } else {
+          try { await fs.unlink(tempOut); } catch {}
+          if (!bestResult || stats.size < bestResult.size) {
+            bestResult = result;
+            bestResult.tempPath = null;
+          }
+        }
       } catch (e) {
-        return { ...s, tempPath: tempOut, error: e.message, size: Infinity };
+        if (!this.options.skip) {
+          console.log(`❌ Failed: ${e.message}`);
+        }
+        try { await fs.unlink(tempOut); } catch {}
+        continue;
       }
-    }));
-    const successful = results.filter(r => r.size <= targetSize && !r.error).sort((a, b) => a.size - b.size);
-    const best = successful[0] || results.sort((a, b) => a.size - b.size)[0];
-    const finalExt = this.getExtensionForFormat(best.codec === 'vp9' ? 'webm' : best.codec === 'av1' ? 'mkv' : 'mp4');
+    }
+        if (!bestResult) {
+      throw new Error('No compression strategy succeeded');
+    }
+    
+    const finalExt = this.getExtensionForFormat(bestResult.codec === 'vp9' ? 'webm' : bestResult.codec === 'av1' ? 'mkv' : 'mp4');
     const finalOutputPath = outputPath.replace(/\.[^.]+$/, finalExt);
-    if (best && best.tempPath) {
-      await fs.rename(best.tempPath, finalOutputPath);
-    }
-    for (const r of results) {
-      if (r.tempPath && r.tempPath !== best.tempPath) {
-        try { await fs.unlink(r.tempPath); } catch {}
+    
+    if (bestResult.tempPath && require('fs').existsSync(bestResult.tempPath)) {
+      await fs.rename(bestResult.tempPath, finalOutputPath);
+    } else {
+      if (!this.options.skip) {
+        console.log('🔄 Recreating best strategy for final output...');
       }
-    }
-    if (!this.options.skip) {
-      if (successful.length > 0) {
-        console.log(`🎯 Extreme: Best result ${((best.size || 0) / (1024*1024)).toFixed(2)}MB (${best.codec}, crf=${best.crf}, preset=${best.preset}, scale=${best.scale})`);
+      
+      let command = require('fluent-ffmpeg')(inputFile)
+        .videoCodec(this.getVideoCodec(bestResult.codec))
+        .audioCodec(this.getAudioCodec())
+        .addOption('-threads', '0')
+        .addOption('-movflags', 'faststart')
+        .addOption('-pix_fmt', 'yuv420p');
+      
+      if (this.isFFmpegLimited) {
+        const bitrates = { ultrafast: '800k', fast: '1200k', medium: '1800k' };
+        command = command.videoBitrate(bitrates[bestResult.preset] || '1200k');
       } else {
-        console.log('⚠️  No strategy reached target, using smallest found.');
+        command = command
+          .addOption('-crf', bestResult.crf.toString())
+          .addOption('-preset', bestResult.preset);
+      }
+      
+      if (bestResult.codec === 'av1') command = command.addOption('-cpu-used', '8');
+      if (bestResult.scale < 1.0) {
+        const w = Math.round((metadata.streams?.[0]?.width || 1920) * bestResult.scale);
+        const h = Math.round((metadata.streams?.[0]?.height || 1080) * bestResult.scale);
+        command = command.size(`${w}x${h}`);
+      }
+      command = command.output(finalOutputPath);
+      await this.executeCompression(command);
+    }
+    
+    if (!this.options.skip) {
+      const targetMB = (targetSize / (1024*1024)).toFixed(2);
+      const resultMB = ((bestResult.size || 0) / (1024*1024)).toFixed(2);
+      if (bestResult.size <= targetSize) {
+        console.log(`🎯 Extreme: Target achieved! ${resultMB}MB (${bestResult.codec}, crf=${bestResult.crf}, preset=${bestResult.preset}, scale=${bestResult.scale})`);
+      } else {
+        console.log(`⚠️ Extreme: Best effort ${resultMB}MB of ${targetMB}MB target (${bestResult.codec}, crf=${bestResult.crf}, preset=${bestResult.preset}, scale=${bestResult.scale})`);
       }
     }
+    
     return finalOutputPath;
   }
 
