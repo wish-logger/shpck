@@ -12,41 +12,77 @@ class ImageCompressor {
 
   async compress(inputFile, options = {}) {
     const mergedOptions = { ...this.options, ...options };
-    
-    const originalStats = await fs.stat(inputFile);
-    const originalSize = originalStats.size;
-    
-    const outputPath = this.generateOutputPath(inputFile, mergedOptions);
-    
-    let sharpInstance = sharp(inputFile);
-    
-    const metadata = await sharpInstance.metadata();
-    
-    sharpInstance = await this.applyTransformations(sharpInstance, metadata, mergedOptions);
-    
-    if (sharpInstance._targetSize) {
-      sharpInstance._originalSize = originalSize;
-    }
-    
-    const finalOutputPath = await this.applyCompression(sharpInstance, outputPath, mergedOptions);
-    
-    const actualOutputPath = finalOutputPath || outputPath;
-    const compressedStats = await fs.stat(actualOutputPath);
-    const compressedSize = compressedStats.size;
-    
-    return {
-      inputFile,
-      outputFile: actualOutputPath,
-      originalSize,
-      compressedSize,
-      reduction: ((originalSize - compressedSize) / originalSize * 100).toFixed(2),
-      metadata: {
-        width: metadata.width,
-        height: metadata.height,
-        format: metadata.format,
-        hasAlpha: metadata.hasAlpha
+    let originalSize, outputPath, sharpInstance, metadata;
+
+    if (Buffer.isBuffer(inputFile)) {
+      originalSize = inputFile.length;
+      sharpInstance = sharp(inputFile);
+      metadata = await sharpInstance.metadata();
+      sharpInstance = await this.applyTransformations(sharpInstance, metadata, mergedOptions);
+      if (sharpInstance._targetSize) {
+        sharpInstance._originalSize = originalSize;
       }
-    };
+      const format = this.determineOutputFormat('fragment.jpg', mergedOptions.format);
+      let buffer;
+      switch (format.toLowerCase()) {
+        case 'jpeg':
+        case 'jpg':
+          buffer = await sharpInstance.jpeg({ quality: mergedOptions.quality || 85 }).toBuffer();
+          break;
+        case 'png':
+          buffer = await sharpInstance.png({ quality: mergedOptions.quality || 85 }).toBuffer();
+          break;
+        case 'webp':
+          buffer = await sharpInstance.webp({ quality: mergedOptions.quality || 85 }).toBuffer();
+          break;
+        case 'avif':
+          buffer = await sharpInstance.avif({ quality: mergedOptions.quality || 50 }).toBuffer();
+          break;
+        default:
+          buffer = await sharpInstance.jpeg({ quality: mergedOptions.quality || 85 }).toBuffer();
+      }
+      return {
+        inputFile,
+        outputFile: null,
+        originalSize,
+        compressedSize: buffer.length,
+        buffer,
+        reduction: ((originalSize - buffer.length) / originalSize * 100).toFixed(2),
+        metadata: {
+          width: metadata.width,
+          height: metadata.height,
+          format: metadata.format,
+          hasAlpha: metadata.hasAlpha
+        }
+      };
+    } else {
+      const originalStats = await fs.stat(inputFile);
+      originalSize = originalStats.size;
+      outputPath = this.generateOutputPath(inputFile, mergedOptions);
+      sharpInstance = sharp(inputFile);
+      metadata = await sharpInstance.metadata();
+      sharpInstance = await this.applyTransformations(sharpInstance, metadata, mergedOptions);
+      if (sharpInstance._targetSize) {
+        sharpInstance._originalSize = originalSize;
+      }
+      const finalOutputPath = await this.applyCompression(sharpInstance, outputPath, mergedOptions);
+      const actualOutputPath = finalOutputPath || outputPath;
+      const compressedStats = await fs.stat(actualOutputPath);
+      const compressedSize = compressedStats.size;
+      return {
+        inputFile,
+        outputFile: actualOutputPath,
+        originalSize,
+        compressedSize,
+        reduction: ((originalSize - compressedSize) / originalSize * 100).toFixed(2),
+        metadata: {
+          width: metadata.width,
+          height: metadata.height,
+          format: metadata.format,
+          hasAlpha: metadata.hasAlpha
+        }
+      };
+    }
   }
 
   async applyTransformations(sharpInstance, metadata, options) {
@@ -223,11 +259,16 @@ class ImageCompressor {
       { format: 'webp', quality: 5, resize: 0.05, effort: 0 },
     ];
     
-    const promises = strategies.map(async (strategy, index) => {
+    const keepDims = this.options.keepDimensions || (baseOptions && baseOptions.keepDimensions);
+    let usedStrategies = strategies;
+    if (keepDims) {
+      usedStrategies = strategies.filter(s => !s.resize);
+    }
+    const promises = usedStrategies.map(async (strategy, index) => {
       try {
         let instance = sharpInstance.clone();
         
-        if (strategy.resize) {
+        if (strategy.resize && !keepDims) {
           const metadata = await sharpInstance.metadata();
           const newWidth = Math.max(1, Math.floor(metadata.width * strategy.resize));
           const newHeight = Math.max(1, Math.floor(metadata.height * strategy.resize));
@@ -512,121 +553,92 @@ class ImageCompressor {
   }
 
   async standardCompressionStrategy(sharpInstance, outputPath, format, baseOptions, originalSize, targetSize, maxAttempts) {
-    let quality = baseOptions.quality || 85;
-    let attempts = 0;
-    
-    if (format === 'png') {
-      let compressionLevel = baseOptions.compressionLevel || 9;
-      let usePalette = true;
-      let useAdaptiveFiltering = true;
-      
-      quality = Math.min(quality, 60);
-      
-      while (attempts < maxAttempts) {
-        const options = { 
-          compressionLevel,
-          palette: usePalette,
-          quality: Math.max(1, quality),
-          adaptiveFiltering: useAdaptiveFiltering,
-          progressive: false,
-          effort: this.speedOptimized ? 3 : 9
-        };
-        
-        const buffer = await sharpInstance.png(options).toBuffer();
-        const currentSize = buffer.length;
-        
-        if (!this.options.skip) {
-          console.log(`📏 Attempt ${attempts + 1}: ${(currentSize / 1024).toFixed(1)}KB (quality: ${quality}, level: ${compressionLevel}, palette: ${usePalette})`);
-        }
-        
-        if (currentSize <= targetSize) {
-          await fs.writeFile(outputPath, buffer);
-          if (!this.options.skip) {
-            console.log(`✅ Target achieved: ${(currentSize / 1024).toFixed(1)}KB`);
-          }
-          return outputPath;
-        }
-        
-        if (attempts < 5) {
-          quality = Math.max(1, quality - 15);
-        } else if (attempts < 10) {
-          compressionLevel = 9;
-          usePalette = true;
-          useAdaptiveFiltering = true;
-          quality = Math.max(1, quality - 8);
-        } else {
-          quality = Math.max(1, Math.floor(quality * 0.6));
-        }
-        
-        attempts++;
-      }
-      
-      if (attempts >= maxAttempts && !this.options.skip) {
-        console.log(`⚠️ PNG failed. Trying JPEG fallback...`);
-        
-        if (targetSize < originalSize * 0.3) {
-          console.log(`🔄 JPEG conversion for extreme compression...`);
-          
-          try {
-            let jpegQuality = 10;
-            
-            const jpegBuffer = await sharpInstance.jpeg({ quality: jpegQuality }).toBuffer();
-            const jpegSize = jpegBuffer.length;
-            
-            if (jpegSize <= targetSize) {
-              const jpegOutputPath = outputPath.replace(/\.png$/i, '.jpg');
-              await fs.writeFile(jpegOutputPath, jpegBuffer);
-              console.log(`✅ JPEG Target achieved: ${(jpegSize / 1024).toFixed(1)}KB`);
-              return jpegOutputPath;
-            }
-          } catch (error) {
-            console.log(`❌ JPEG conversion failed: ${error.message}`);
-          }
-        }
-      }
-      
-    } else {
-      while (attempts < maxAttempts) {
-        const options = { ...baseOptions, quality };
-        
+    if (["jpeg", "jpg", "webp", "avif"].includes(format)) {
+      let minQ = 5;
+      let maxQ = baseOptions.quality || 85;
+      let bestBuffer = null;
+      let bestQ = minQ;
+      let bestSize = Infinity;
+      let lastGoodQ = null;
+      let lastGoodBuffer = null;
+      let attempts = 0;
+      const orig = sharpInstance.clone();
+      while (minQ <= maxQ && attempts < maxAttempts) {
+        const q = Math.floor((minQ + maxQ) / 2);
         let buffer;
-        
+        let inst = orig.clone();
         switch (format) {
-          case 'jpeg':
-            buffer = await sharpInstance.jpeg(options).toBuffer();
+          case "jpeg":
+          case "jpg":
+            buffer = await inst.jpeg({ quality: q, progressive: baseOptions.progressive !== false }).toBuffer();
             break;
-          case 'webp':
-            buffer = await sharpInstance.webp(options).toBuffer();
+          case "webp":
+            buffer = await inst.webp({ quality: q, effort: baseOptions.speedOptimized ? 1 : 4 }).toBuffer();
             break;
-          case 'avif':
-            buffer = await sharpInstance.avif(options).toBuffer();
+          case "avif":
+            buffer = await inst.avif({ quality: q, effort: baseOptions.speedOptimized ? 1 : 4 }).toBuffer();
             break;
         }
-        
-        const currentSize = buffer.length;
-        
-        if (!this.options.skip) {
-          console.log(`📏 Attempt ${attempts + 1}: ${(currentSize / 1024).toFixed(1)}KB (quality: ${quality})`);
-        }
-        
-        if (currentSize <= targetSize || quality <= 5) {
-          await fs.writeFile(outputPath, buffer);
-          return outputPath;
-        }
-        
-        const compressionRatio = currentSize / targetSize;
-        if (compressionRatio > 3) {
-          quality = Math.max(5, quality - 30);
-        } else if (compressionRatio > 2) {
-          quality = Math.max(5, quality - 20);
+        if (buffer.length <= targetSize) {
+          lastGoodQ = q;
+          lastGoodBuffer = buffer;
+          bestSize = buffer.length;
+          minQ = q + 1;
         } else {
-          quality = Math.max(5, quality - 12);
+          maxQ = q - 1;
         }
-        
         attempts++;
+      }
+      if (lastGoodBuffer) {
+        await fs.writeFile(outputPath, lastGoodBuffer);
+        return outputPath;
+      } else {
+        let inst = orig.clone();
+        let buffer;
+        switch (format) {
+          case "jpeg":
+          case "jpg":
+            buffer = await inst.jpeg({ quality: minQ, progressive: baseOptions.progressive !== false }).toBuffer();
+            break;
+          case "webp":
+            buffer = await inst.webp({ quality: minQ, effort: baseOptions.speedOptimized ? 1 : 4 }).toBuffer();
+            break;
+          case "avif":
+            buffer = await inst.avif({ quality: minQ, effort: baseOptions.speedOptimized ? 1 : 4 }).toBuffer();
+            break;
+        }
+        await fs.writeFile(outputPath, buffer);
+        return outputPath;
       }
     }
-    
+    if (format === "png") {
+      let bestBuffer = null;
+      let bestSize = Infinity;
+      const orig = sharpInstance.clone();
+      const levels = baseOptions.speedOptimized ? [3, 6] : [6, 9];
+      const palettes = [true, false];
+      for (const compressionLevel of levels) {
+        for (const palette of palettes) {
+          let inst = orig.clone();
+          let buffer = await inst.png({
+            compressionLevel,
+            palette,
+            quality: Math.min(baseOptions.quality || 85, 95),
+            progressive: false
+          }).toBuffer();
+          if (buffer.length < bestSize) {
+            bestSize = buffer.length;
+            bestBuffer = buffer;
+          }
+          if (buffer.length <= targetSize) {
+            await fs.writeFile(outputPath, buffer);
+            return outputPath;
+          }
+        }
+      }
+      await fs.writeFile(outputPath, bestBuffer);
+      return outputPath;
+    }
     return outputPath;
   }
 

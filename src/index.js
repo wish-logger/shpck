@@ -51,6 +51,7 @@ program
   .option('--no-optimize', 'Skip advanced optimizations for maximum speed')
   .option('--multi-thread', 'Enable multi-threaded processing (auto-enabled for 4+ files or files larger than 3GB)')
   .option('--force-threads', 'Force multi-threading even for small file counts')
+  .option('-k, --keep-dimensions', 'Keep original image/video dimensions (ignore --width/--height/--target-size)', false)
   .action(compressCommand);
 
 program

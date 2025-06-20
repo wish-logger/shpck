@@ -14,22 +14,26 @@ class ThreadManager {
   
   calculateOptimalThreads() {
     const totalCores = os.cpus().length;
-    
-    if (this.options.threads) {
-      this.threadCount = parseInt(this.options.threads);
+    if (this.options.threads && this.options.ultrafast) {
+      this.threadCount = Math.max(2, Math.min(parseInt(this.options.threads) * 4, 32));
+    } else if (this.options.threads) {
+      this.threadCount = Math.max(2, Math.min(parseInt(this.options.threads) * 2, 32));
     } else if (this.options.ultrafast) {
-      const coresFor50Percent = Math.max(Math.floor(totalCores * 0.5), 4);
-      this.threadCount = coresFor50Percent * 2;
+      this.threadCount = Math.max(2, Math.min(totalCores * 4, 32));
     } else {
-      this.threadCount = Math.max(Math.floor(totalCores * 0.75), 4);
+      this.threadCount = Math.max(2, Math.min(totalCores * 2, 32));
     }
-    
-    this.threadCount = Math.min(this.threadCount, 32);
-    
     if (!this.isQuiet) {
       console.log(chalk.gray(`🧵 Thread Manager: ${totalCores} CPU cores detected`));
-      console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (${(this.threadCount/totalCores*100).toFixed(0)}% utilization)`));
-      
+      if (this.options.threads && this.options.ultrafast) {
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (4x per thread, threads + ultrafast mode)`));
+      } else if (this.options.threads) {
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (2x per thread, threads)`));
+      } else if (this.options.ultrafast) {
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (4x per core, ultrafast mode)`));
+      } else {
+        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (2x per core)`));
+      }
       if (this.threadCount > totalCores * 1.5) {
         console.log(chalk.yellow(`⚠️  Warning: Over-subscription detected (${this.threadCount} workers > ${totalCores} cores)`));
       }
@@ -64,26 +68,32 @@ class ThreadManager {
     if (files.length === 0) {
       return { processed: 0, errors: [], totalSizeReduction: 0 };
     }
-    
-    if (files.length < 4 && !options.forceThreads) {
-      if (!this.isQuiet) {
-        console.log(chalk.gray(`🔄 Using single thread for ${files.length} files (overhead optimization)`));
-      }
-      return this.processSingleThreaded(files, options);
+
+    let filesToProcess = files;
+    if (options.forceThreads) {
+      const { splitLargeImagesIntoFragments } = require('./threadManager_imageFragmentation');
+      filesToProcess = await splitLargeImagesIntoFragments(files, this.threadCount, options);
     }
-    
-    const chunks = this.chunkFiles(files);
+
+    if (filesToProcess.length < 4 && !options.forceThreads) {
+      if (!this.isQuiet) {
+        console.log(chalk.gray(`🔄 Using single thread for ${filesToProcess.length} files (overhead optimization)`));
+      }
+      return this.processSingleThreaded(filesToProcess, options);
+    }
+
+    const chunks = this.chunkFiles(filesToProcess);
     const results = {
       processed: 0,
       errors: [],
       totalSizeReduction: 0,
       processingTimes: []
     };
-    
+
     if (!this.isQuiet) {
       console.log(chalk.cyan(`🚀 Starting multi-threaded compression with ${chunks.length} workers...`));
     }
-    
+
     try {
       await this.executeWorkers(chunks, options, results);
     } catch (error) {
@@ -94,11 +104,11 @@ class ThreadManager {
     } finally {
       await this.cleanup();
     }
-    
+
     if (!this.isQuiet) {
       this.printPerformanceStats(results);
     }
-    
+
     return results;
   }
   
@@ -113,12 +123,25 @@ class ThreadManager {
   createWorker(chunk, options, results) {
     return new Promise((resolve, reject) => {
       const workerPath = path.join(__dirname, '../workers/compressionWorker.js');
-      
+      let ffmpegPath = null, ffprobePath = null, isLimited = false, hasFFprobe = false;
+      const hasVideo = chunk.files.some(f => typeof f === 'string' && /\.(mp4|avi|mov|mkv|webm|flv|wmv)$/i.test(f));
+      if (hasVideo) {
+        const { VideoCompressor } = require('../compressors/videoCompressor');
+        const ffmpegPaths = VideoCompressor.detectFFmpegPaths();
+        ffmpegPath = ffmpegPaths.ffmpegPath;
+        ffprobePath = ffmpegPaths.ffprobePath;
+        isLimited = ffmpegPaths.isLimited;
+        hasFFprobe = ffmpegPaths.hasFFprobe;
+      }
       const worker = new Worker(workerPath, {
         workerData: {
           files: chunk.files,
           options: { ...this.options, ...options },
-          workerIndex: chunk.workerIndex
+          workerIndex: chunk.workerIndex,
+          ffmpegPath,
+          ffprobePath,
+          isLimited,
+          hasFFprobe
         }
       });
       
@@ -271,4 +294,4 @@ class ThreadManager {
   }
 }
 
-module.exports = { ThreadManager }; 
+module.exports = { ThreadManager };

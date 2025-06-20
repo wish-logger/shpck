@@ -18,7 +18,11 @@ if (!isMainThread) {
       const videoCompressor = new VideoCompressor({
         ...options,
         speedOptimized: options.ultrafast || false,
-        skipOptimizations: options.noOptimize || false
+        skipOptimizations: options.noOptimize || false,
+        ffmpegPath: workerData.ffmpegPath,
+        ffprobePath: workerData.ffprobePath,
+        isLimited: workerData.isLimited,
+        hasFFprobe: workerData.hasFFprobe
       });
       
       const results = [];
@@ -27,16 +31,22 @@ if (!isMainThread) {
         try {
           const startTime = Date.now();
           
-          const isImage = /\.(jpg|jpeg|png|webp|avif|bmp|tiff)$/i.test(file);
-          const isVideo = /\.(mp4|avi|mov|mkv|webm|flv|wmv)$/i.test(file);
-          
           let result;
-          if (isImage) {
-            result = await imageCompressor.compress(file, options);
-          } else if (isVideo) {
-            result = await videoCompressor.compress(file, options);
+          if (file && file.buffer && file.originalFile) {
+            result = await imageCompressor.compress(file.buffer, options);
+            result.fragmentIndex = file.fragmentIndex;
+            result.totalFragments = file.totalFragments;
+            result.originalFile = file.originalFile;
           } else {
-            throw new Error(`Unsupported file type: ${path.extname(file)}`);
+            const isImage = /\.(jpg|jpeg|png|webp|avif|bmp|tiff)$/i.test(file);
+            const isVideo = /\.(mp4|avi|mov|mkv|webm|flv|wmv)$/i.test(file);
+            if (isImage) {
+              result = await imageCompressor.compress(file, options);
+            } else if (isVideo) {
+              result = await videoCompressor.compress(file, options);
+            } else {
+              throw new Error(`Unsupported file type: ${typeof file === 'string' ? path.extname(file) : 'fragment'}`);
+            }
           }
           
           const processingTime = Date.now() - startTime;
@@ -50,14 +60,14 @@ if (!isMainThread) {
           
           parentPort.postMessage({
             type: 'progress',
-            file: path.basename(file),
+            file: typeof file === 'string' ? path.basename(file) : `${path.basename(file.originalFile)}[fragment ${file.fragmentIndex+1}/${file.totalFragments}]`,
             result,
             workerIndex
           });
           
         } catch (error) {
           results.push({
-            file,
+            file: typeof file === 'string' ? file : file.originalFile,
             error: error.message,
             workerIndex,
             success: false
@@ -65,7 +75,7 @@ if (!isMainThread) {
           
           parentPort.postMessage({
             type: 'error',
-            file: path.basename(file),
+            file: typeof file === 'string' ? path.basename(file) : `${path.basename(file.originalFile)}[fragment ${file.fragmentIndex+1}/${file.totalFragments}]`,
             error: error.message,
             workerIndex
           });

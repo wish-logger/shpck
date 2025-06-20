@@ -94,6 +94,14 @@ async function compressCommand(files, options) {
       console.log(chalk.yellow('⚠️  Warning: The --overwrite flag is not supported for video files.'));
     }
 
+    if (options.keepDimensions || options.k) {
+      delete options.width;
+      delete options.height;
+      if (!isQuiet) {
+        console.log(chalk.cyan('🖼️  Keeping original dimensions (width, height)'));
+      }
+    }
+
     if (useMultiThread) {
       const threadManager = new ThreadManager(options);
       
