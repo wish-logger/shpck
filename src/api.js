@@ -9,11 +9,11 @@ const { configCommand } = require('./commands/config');
  * @property {string} [output] - Output directory or file path. If not specified, files are compressed in-place.
  * @property {string} [format] - Output format (auto, jpg, png, webp, avif, mp4, mkv, etc.). Auto-detects best format if not specified.
  * @property {string} [targetSize] - Target file size (e.g., "200MB", "5MB", "1GB"). Tool will adjust compression to reach this size.
- * @property {string} [strategy="auto"] - Compression strategy: "auto" (intelligent), "size" (smallest file), "quality" (best quality), "speed" (fastest processing).
+ * @property {'auto'|'size'|'quality'|'speed'} [strategy='auto'] - Compression strategy: "auto" (intelligent), "size" (smallest file), "quality" (best quality), "speed" (fastest processing).
  * @property {number} [width] - Target width for images/videos in pixels. Maintains aspect ratio if only width or height specified.
  * @property {number} [height] - Target height for images/videos in pixels. Maintains aspect ratio if only width or height specified.
  * @property {string} [bitrate] - Video bitrate (e.g., "1000k", "2M", "500k"). Controls video quality vs file size.
- * @property {string} [codec] - Video codec ("h264", "h265", "vp9", "av1"). h264 = compatibility, h265/vp9 = efficiency.
+ * @property {'h264'|'h265'|'vp9'|'av1'} [codec] - Video codec ("h264", "h265", "vp9", "av1"). h264 = compatibility, h265/vp9 = efficiency.
  * @property {boolean} [recursive=false] - Process directories recursively. Scans all subdirectories for files.
  * @property {boolean} [progressive=false] - Enable progressive encoding for images. Better for web loading.
  * @property {boolean} [overwrite=false] - Overwrite existing files. WARNING: Not supported for video files.
@@ -48,7 +48,7 @@ const { configCommand } = require('./commands/config');
  * - Batch processing with progress tracking
  * 
  * @param {string|string[]} files - File path, directory path, or array of paths/patterns to compress
- * @param {CompressionOptions} [options={}] - Compression configuration options
+ * @param {CompressionOptions} [options] - Compression configuration options
  * @returns {Promise<CompressionResult>} Promise resolving to compression results with statistics
  * 
  * @example
@@ -89,8 +89,8 @@ const { configCommand } = require('./commands/config');
  *   height: 1080
  * });
  */
-async function compress(files, options = {}) {
-  return await compressCommand(Array.isArray(files) ? files : [files], options);
+async function compress(files, options) {
+  return await compressCommand(Array.isArray(files) ? files : [files], options || {});
 }
 
 /**
@@ -112,7 +112,7 @@ async function compress(files, options = {}) {
  * Provides insights into file sizes, formats, and potential space savings.
  * 
  * @param {string|string[]} files - File path, directory path, or array of paths/patterns to analyze
- * @param {AnalysisOptions} [options={}] - Analysis configuration options
+ * @param {AnalysisOptions} [options] - Analysis configuration options
  * @returns {Promise<AnalysisResult>} Promise resolving to analysis results with estimates
  * 
  * @example
@@ -127,8 +127,8 @@ async function compress(files, options = {}) {
  *   detailed: true
  * });
  */
-async function analyze(files, options = {}) {
-  return await analyzeCommand(Array.isArray(files) ? files : [files], options);
+async function analyze(files, options) {
+  return await analyzeCommand(Array.isArray(files) ? files : [files], options || {});
 }
 
 /**
@@ -142,7 +142,7 @@ async function analyze(files, options = {}) {
  * Manage shpck configuration settings. Set default compression options,
  * thread counts, and other preferences that persist across sessions.
  * 
- * @param {ConfigOptions} [options={}] - Configuration management options
+ * @param {ConfigOptions} [options] - Configuration management options
  * @returns {Promise<void>} Promise resolving when configuration operation completes
  * 
  * @example
@@ -157,8 +157,8 @@ async function analyze(files, options = {}) {
  * // Set default quality
  * await shpck.config({ set: 'quality=90' });
  */
-async function config(options = {}) {
-  return await configCommand(options);
+async function config(options) {
+  return await configCommand(options || {});
 }
 
 module.exports = {
