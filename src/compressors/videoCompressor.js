@@ -290,6 +290,180 @@ class VideoCompressor {
     
     const duration = metadata.format?.duration || 60;
     
+    // Check if we should use parallel processing
+    if (options.forceThreads && !this.options.skip) {
+      return await this.parallelExtremeCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetSize);
+    }
+    
+    // Reduce strategies to avoid creating too many files
+    let strategies = [];
+    
+    if (this.isFFmpegLimited) {
+      // For SteelSeries FFmpeg, use compatible options only
+      const resolutions = [1.0, 0.7, 0.5];
+      const bitrates = ['800k', '600k', '400k', '200k'];
+      const codecs = ['h264_nvenc']; // Only NVENC for SteelSeries
+      
+      for (const codec of codecs) {
+        for (const bitrate of bitrates) {
+          for (const scale of resolutions) {
+            strategies.push({ codec, bitrate, scale, preset: 'fast' });
+          }
+        }
+      }
+    } else {
+      // Full FFmpeg strategies (but still reduced)
+      const resolutions = [1.0, 0.7, 0.5];
+      const crfs = [28, 32, 36, 40];
+      const presets = ['fast', 'medium'];
+      const codecs = ['h264'];
+      
+      for (const codec of codecs) {
+        for (const preset of presets) {
+          for (const crf of crfs) {
+            for (const scale of resolutions) {
+              strategies.push({ codec, preset, crf, scale });
+            }
+          }
+        }
+      }
+    }
+    
+    let bestResult = null;
+    const baseName = path.basename(inputFile, path.extname(inputFile));
+    
+    for (let i = 0; i < strategies.length; i++) {
+      const s = strategies[i];
+      
+      // Use unique temporary file name for each strategy
+      const tempOut = outputPath.replace(/\.[^.]+$/, `_extreme_${i}.mp4`);
+      
+      if (!this.options.skip) {
+        console.log(`🧪 Testing strategy ${i+1}/${strategies.length}: ${s.codec} ${s.crf ? `CRF${s.crf}` : s.bitrate} ${s.preset} ${(s.scale*100)}%`);
+      }
+      
+      let command = require('fluent-ffmpeg')(inputFile)
+        .videoCodec(this.getVideoCodec(s.codec))
+        .audioCodec(this.getAudioCodec())
+        .addOption('-threads', '0')
+        .addOption('-movflags', 'faststart')
+        .addOption('-pix_fmt', 'yuv420p');
+      
+      if (this.isFFmpegLimited || s.bitrate) {
+        // Use bitrate for limited FFmpeg
+        command = command.videoBitrate(s.bitrate || '1200k');
+      } else {
+        // Use CRF for full FFmpeg
+        command = command.addOption('-crf', s.crf.toString());
+        // Don't use preset for SteelSeries NVENC
+        if (!s.codec.includes('nvenc')) {
+          command = command.addOption('-preset', s.preset);
+        }
+      }
+      
+      if (s.scale < 1.0) {
+        const w = Math.round((metadata.streams?.[0]?.width || 1920) * s.scale);
+        const h = Math.round((metadata.streams?.[0]?.height || 1080) * s.scale);
+        command = command.size(`${w}x${h}`);
+      }
+      
+      command = command.output(tempOut);
+      
+      try {
+        await this.executeCompression(command);
+        const stats = await fs.stat(tempOut);
+        const result = { ...s, tempPath: tempOut, size: stats.size };
+        
+        if (!this.options.skip) {
+          console.log(`📊 Result: ${(stats.size / (1024*1024)).toFixed(2)}MB (target: ${(targetSize / (1024*1024)).toFixed(2)}MB)`);
+        }
+        
+        if (stats.size <= targetSize) {
+          bestResult = result;
+          // Clean up other temp files before breaking
+          for (let j = 0; j < i; j++) {
+            try { 
+              const oldTemp = outputPath.replace(/\.[^.]+$/, `_extreme_${j}.mp4`);
+              await fs.unlink(oldTemp); 
+            } catch {}
+          }
+          break;
+        } else {
+          // Immediately clean up this failed attempt
+          try { await fs.unlink(tempOut); } catch {}
+          if (!bestResult || stats.size < bestResult.size) {
+            bestResult = result;
+            bestResult.tempPath = null;
+          }
+        }
+      } catch (e) {
+        if (!this.options.skip) {
+          console.log(`❌ Failed: ${e.message}`);
+        }
+        try { await fs.unlink(tempOut); } catch {}
+        continue;
+      }
+    }
+    
+    if (!bestResult) {
+      throw new Error('No compression strategy succeeded');
+    }
+    
+    const finalExt = this.getExtensionForFormat('mp4'); // Always use MP4 for SteelSeries compatibility
+    const finalOutputPath = outputPath.replace(/\.[^.]+$/, finalExt);
+    
+    if (bestResult.tempPath && require('fs').existsSync(bestResult.tempPath)) {
+      await fs.rename(bestResult.tempPath, finalOutputPath);
+    } else {
+      if (!this.options.skip) {
+        console.log('🔄 Recreating best strategy for final output...');
+      }
+      
+      let command = require('fluent-ffmpeg')(inputFile)
+        .videoCodec(this.getVideoCodec(bestResult.codec))
+        .audioCodec(this.getAudioCodec())
+        .addOption('-threads', '0')
+        .addOption('-movflags', 'faststart')
+        .addOption('-pix_fmt', 'yuv420p');
+      
+      if (this.isFFmpegLimited || bestResult.bitrate) {
+        command = command.videoBitrate(bestResult.bitrate || '1200k');
+      } else {
+        command = command.addOption('-crf', bestResult.crf.toString());
+        if (!bestResult.codec.includes('nvenc')) {
+          command = command.addOption('-preset', bestResult.preset);
+        }
+      }
+      
+      if (bestResult.scale < 1.0) {
+        const w = Math.round((metadata.streams?.[0]?.width || 1920) * bestResult.scale);
+        const h = Math.round((metadata.streams?.[0]?.height || 1080) * bestResult.scale);
+        command = command.size(`${w}x${h}`);
+      }
+      command = command.output(finalOutputPath);
+      await this.executeCompression(command);
+    }
+    
+    if (!this.options.skip) {
+      const targetMB = (targetSize / (1024*1024)).toFixed(2);
+      const resultMB = ((bestResult.size || 0) / (1024*1024)).toFixed(2);
+      if (bestResult.size <= targetSize) {
+        console.log(`🎯 Extreme: Target achieved! ${resultMB}MB (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
+      } else {
+        console.log(`⚠️ Extreme: Best effort ${resultMB}MB of ${targetMB}MB target (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
+      }
+    }
+    
+    return finalOutputPath;
+  }
+
+  async parallelExtremeCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetSize) {
+    if (!this.options.skip) {
+      console.log('🚀 EXTREME VIDEO COMPRESSION MODE: parallel strategies (controlled batches)...');
+    }
+    
+    const duration = metadata.format?.duration || 60;
+    
     let strategies = [];
     
     if (this.isFFmpegLimited) {
@@ -321,74 +495,107 @@ class VideoCompressor {
       }
     }
     
-    let bestResult = null;
-    const baseName = path.basename(inputFile, path.extname(inputFile));
+    const maxConcurrent = Math.min(3, require('os').cpus().length);
+    const batchSize = Math.ceil(strategies.length / maxConcurrent);
     
-    for (let i = 0; i < strategies.length; i++) {
-      const s = strategies[i];
-      
-      const tempOut = outputPath.replace(/\.[^.]+$/, `_extreme_${i}.mp4`);
+    if (!this.options.skip) {
+      console.log(`📦 Testing ${strategies.length} strategies in ${Math.ceil(strategies.length / batchSize)} batches of max ${batchSize} strategies`);
+    }
+    
+    let bestResult = null;
+    let batchIndex = 0;
+    
+    for (let i = 0; i < strategies.length; i += batchSize) {
+      batchIndex++;
+      const batch = strategies.slice(i, Math.min(i + batchSize, strategies.length));
       
       if (!this.options.skip) {
-        console.log(`🧪 Testing strategy ${i+1}/${strategies.length}: ${s.codec} ${s.crf ? `CRF${s.crf}` : s.bitrate} ${s.preset} ${(s.scale*100)}%`);
+        console.log(`🧪 Testing batch ${batchIndex}/${Math.ceil(strategies.length / batchSize)} (${batch.length} strategies)...`);
       }
       
-      let command = require('fluent-ffmpeg')(inputFile)
-        .videoCodec(this.getVideoCodec(s.codec))
-        .audioCodec(this.getAudioCodec())
-        .addOption('-threads', '0')
-        .addOption('-movflags', 'faststart')
-        .addOption('-pix_fmt', 'yuv420p');
-      
-      if (this.isFFmpegLimited || s.bitrate) {
-        command = command.videoBitrate(s.bitrate || '1200k');
-      } else {
-        command = command.addOption('-crf', s.crf.toString());
-        if (!s.codec.includes('nvenc')) {
-          command = command.addOption('-preset', s.preset);
-        }
-      }
-      
-      if (s.scale < 1.0) {
-        const w = Math.round((metadata.streams?.[0]?.width || 1920) * s.scale);
-        const h = Math.round((metadata.streams?.[0]?.height || 1080) * s.scale);
-        command = command.size(`${w}x${h}`);
-      }
-      
-      command = command.output(tempOut);
-      
-      try {
-        await this.executeCompression(command);
-        const stats = await fs.stat(tempOut);
-        const result = { ...s, tempPath: tempOut, size: stats.size };
+      const batchPromises = batch.map(async (strategy, strategyIndex) => {
+        const globalIndex = i + strategyIndex;
+        const tempOut = outputPath.replace(/\.[^.]+$/, `_extreme_${globalIndex}.mp4`);
         
-        if (!this.options.skip) {
-          console.log(`📊 Result: ${(stats.size / (1024*1024)).toFixed(2)}MB (target: ${(targetSize / (1024*1024)).toFixed(2)}MB)`);
-        }
-        
-        if (stats.size <= targetSize) {
-          bestResult = result;
-          for (let j = 0; j < i; j++) {
-            try { 
-              const oldTemp = outputPath.replace(/\.[^.]+$/, `_extreme_${j}.mp4`);
-              await fs.unlink(oldTemp); 
-            } catch {}
+        try {
+          let command = require('fluent-ffmpeg')(inputFile)
+            .videoCodec(this.getVideoCodec(strategy.codec))
+            .audioCodec(this.getAudioCodec())
+            .addOption('-threads', '1')
+            .addOption('-movflags', 'faststart')
+            .addOption('-pix_fmt', 'yuv420p');
+          
+          if (this.isFFmpegLimited || strategy.bitrate) {
+            command = command.videoBitrate(strategy.bitrate || '1200k');
+          } else {
+            command = command.addOption('-crf', strategy.crf.toString());
+            if (!strategy.codec.includes('nvenc')) {
+              command = command.addOption('-preset', strategy.preset);
+            }
           }
+          
+          if (strategy.scale < 1.0) {
+            const w = Math.round((metadata.streams?.[0]?.width || 1920) * strategy.scale);
+            const h = Math.round((metadata.streams?.[0]?.height || 1080) * strategy.scale);
+            command = command.size(`${w}x${h}`);
+          }
+          
+          command = command.output(tempOut);
+          await this.executeCompression(command);
+          
+          const stats = await fs.stat(tempOut);
+          const result = { ...strategy, tempPath: tempOut, size: stats.size, index: globalIndex };
+          
+          if (!this.options.skip) {
+            console.log(`📊 Strategy ${globalIndex+1}: ${(stats.size / (1024*1024)).toFixed(2)}MB (target: ${(targetSize / (1024*1024)).toFixed(2)}MB)`);
+          }
+          
+          return result;
+        } catch (e) {
+          if (!this.options.skip) {
+            console.log(`❌ Strategy ${globalIndex+1} failed: ${e.message}`);
+          }
+          try { await fs.unlink(tempOut); } catch {}
+          return null;
+        }
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      
+      for (const result of batchResults) {
+        if (!result) continue;
+        
+        if (result.size <= targetSize) {
+          bestResult = result;
+          
+          if (!this.options.skip) {
+            console.log(`🎯 Target achieved! Cleaning up temporary files...`);
+          }
+          
+          for (let j = 0; j < strategies.length; j++) {
+            if (j !== result.index) {
+              try {
+                const tempFile = outputPath.replace(/\.[^.]+$/, `_extreme_${j}.mp4`);
+                await fs.unlink(tempFile);
+              } catch {}
+            }
+          }
+          
           break;
         } else {
-          try { await fs.unlink(tempOut); } catch {}
-          if (!bestResult || stats.size < bestResult.size) {
+          try { await fs.unlink(result.tempPath); } catch {}
+          if (!bestResult || result.size < bestResult.size) {
             bestResult = result;
             bestResult.tempPath = null;
           }
         }
-      } catch (e) {
-        if (!this.options.skip) {
-          console.log(`❌ Failed: ${e.message}`);
-        }
-        try { await fs.unlink(tempOut); } catch {}
-        continue;
       }
+      
+      if (bestResult && bestResult.tempPath) {
+        break;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     if (!bestResult) {
@@ -434,9 +641,9 @@ class VideoCompressor {
       const targetMB = (targetSize / (1024*1024)).toFixed(2);
       const resultMB = ((bestResult.size || 0) / (1024*1024)).toFixed(2);
       if (bestResult.size <= targetSize) {
-        console.log(`🎯 Extreme: Target achieved! ${resultMB}MB (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
+        console.log(`🎯 Parallel Extreme: Target achieved! ${resultMB}MB (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
       } else {
-        console.log(`⚠️ Extreme: Best effort ${resultMB}MB of ${targetMB}MB target (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
+        console.log(`⚠️ Parallel Extreme: Best effort ${resultMB}MB of ${targetMB}MB target (${bestResult.codec}${bestResult.crf ? `, crf=${bestResult.crf}` : `, bitrate=${bestResult.bitrate}`}, scale=${bestResult.scale})`);
       }
     }
     
