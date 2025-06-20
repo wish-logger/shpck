@@ -289,20 +289,20 @@ class VideoCompressor {
     }
     
     const duration = metadata.format?.duration || 60;
+    const width = metadata.streams?.[0]?.width || 1920;
+    const height = metadata.streams?.[0]?.height || 1080;
+    const isLargeVideo = width > 2560 || height > 1440;
     
-    // Check if we should use parallel processing
     if (options.forceThreads && !this.options.skip) {
       return await this.parallelExtremeCompressionStrategy(inputFile, outputPath, metadata, options, originalSize, targetSize);
     }
     
-    // Reduce strategies to avoid creating too many files
     let strategies = [];
     
     if (this.isFFmpegLimited) {
-      // For SteelSeries FFmpeg, use compatible options only
-      const resolutions = [1.0, 0.7, 0.5];
-      const bitrates = ['800k', '600k', '400k', '200k'];
-      const codecs = ['h264_nvenc']; // Only NVENC for SteelSeries
+      const resolutions = isLargeVideo ? [0.5, 0.3, 0.2] : [1.0, 0.7, 0.5];
+      const bitrates = isLargeVideo ? ['400k', '200k', '100k'] : ['800k', '600k', '400k', '200k'];
+      const codecs = ['h264_nvenc'];
       
       for (const codec of codecs) {
         for (const bitrate of bitrates) {
@@ -312,9 +312,8 @@ class VideoCompressor {
         }
       }
     } else {
-      // Full FFmpeg strategies (but still reduced)
-      const resolutions = [1.0, 0.7, 0.5];
-      const crfs = [28, 32, 36, 40];
+      const resolutions = isLargeVideo ? [0.5, 0.3, 0.2] : [1.0, 0.7, 0.5];
+      const crfs = isLargeVideo ? [32, 36, 40, 45] : [28, 32, 36, 40];
       const presets = ['fast', 'medium'];
       const codecs = ['h264'];
       
@@ -329,33 +328,52 @@ class VideoCompressor {
       }
     }
     
+    if (!this.options.skip && isLargeVideo) {
+      console.log(`⚠️ Large video detected (${width}x${height}) - using conservative settings`);
+    }
+    
     let bestResult = null;
     const baseName = path.basename(inputFile, path.extname(inputFile));
     
     for (let i = 0; i < strategies.length; i++) {
       const s = strategies[i];
       
-      // Use unique temporary file name for each strategy
       const tempOut = outputPath.replace(/\.[^.]+$/, `_extreme_${i}.mp4`);
       
       if (!this.options.skip) {
         console.log(`🧪 Testing strategy ${i+1}/${strategies.length}: ${s.codec} ${s.crf ? `CRF${s.crf}` : s.bitrate} ${s.preset} ${(s.scale*100)}%`);
       }
       
+      const scaledWidth = Math.round(width * s.scale);
+      const scaledHeight = Math.round(height * s.scale);
+      const totalPixels = scaledWidth * scaledHeight;
+      
+      let optimalThreads;
+      if (totalPixels > 4000000) {
+        optimalThreads = Math.min(4, require('os').cpus().length);
+      } else if (totalPixels > 2000000) {
+        optimalThreads = Math.min(2, require('os').cpus().length);
+      } else {
+        optimalThreads = 1;
+      }
+      
       let command = require('fluent-ffmpeg')(inputFile)
         .videoCodec(this.getVideoCodec(s.codec))
         .audioCodec(this.getAudioCodec())
-        .addOption('-threads', '0')
+        .addOption('-threads', optimalThreads.toString())
         .addOption('-movflags', 'faststart')
         .addOption('-pix_fmt', 'yuv420p');
       
+      if (isLargeVideo) {
+        command = command
+          .addOption('-bufsize', '2M')
+          .addOption('-maxrate', '10M');
+      }
+      
       if (this.isFFmpegLimited || s.bitrate) {
-        // Use bitrate for limited FFmpeg
         command = command.videoBitrate(s.bitrate || '1200k');
       } else {
-        // Use CRF for full FFmpeg
         command = command.addOption('-crf', s.crf.toString());
-        // Don't use preset for SteelSeries NVENC
         if (!s.codec.includes('nvenc')) {
           command = command.addOption('-preset', s.preset);
         }
@@ -380,7 +398,6 @@ class VideoCompressor {
         
         if (stats.size <= targetSize) {
           bestResult = result;
-          // Clean up other temp files before breaking
           for (let j = 0; j < i; j++) {
             try { 
               const oldTemp = outputPath.replace(/\.[^.]+$/, `_extreme_${j}.mp4`);
@@ -389,7 +406,6 @@ class VideoCompressor {
           }
           break;
         } else {
-          // Immediately clean up this failed attempt
           try { await fs.unlink(tempOut); } catch {}
           if (!bestResult || stats.size < bestResult.size) {
             bestResult = result;
@@ -398,7 +414,7 @@ class VideoCompressor {
         }
       } catch (e) {
         if (!this.options.skip) {
-          console.log(`❌ Failed: ${e.message}`);
+          console.log(`❌ Failed: ${e.message.split('\n')[0]}`);
         }
         try { await fs.unlink(tempOut); } catch {}
         continue;
@@ -419,12 +435,31 @@ class VideoCompressor {
         console.log('🔄 Recreating best strategy for final output...');
       }
       
+      const scaledWidth = Math.round(width * bestResult.scale);
+      const scaledHeight = Math.round(height * bestResult.scale);
+      const totalPixels = scaledWidth * scaledHeight;
+      
+      let optimalThreads;
+      if (totalPixels > 4000000) {
+        optimalThreads = Math.min(4, require('os').cpus().length);
+      } else if (totalPixels > 2000000) {
+        optimalThreads = Math.min(2, require('os').cpus().length);
+      } else {
+        optimalThreads = 1;
+      }
+      
       let command = require('fluent-ffmpeg')(inputFile)
         .videoCodec(this.getVideoCodec(bestResult.codec))
         .audioCodec(this.getAudioCodec())
-        .addOption('-threads', '0')
+        .addOption('-threads', optimalThreads.toString())
         .addOption('-movflags', 'faststart')
         .addOption('-pix_fmt', 'yuv420p');
+      
+      if (isLargeVideo) {
+        command = command
+          .addOption('-bufsize', '2M')
+          .addOption('-maxrate', '10M');
+      }
       
       if (this.isFFmpegLimited || bestResult.bitrate) {
         command = command.videoBitrate(bestResult.bitrate || '1200k');
@@ -463,12 +498,15 @@ class VideoCompressor {
     }
     
     const duration = metadata.format?.duration || 60;
+    const width = metadata.streams?.[0]?.width || 1920;
+    const height = metadata.streams?.[0]?.height || 1080;
+    const isLargeVideo = width > 2560 || height > 1440;
     
     let strategies = [];
     
     if (this.isFFmpegLimited) {
-      const resolutions = [1.0, 0.7, 0.5];
-      const bitrates = ['800k', '600k', '400k', '200k'];
+      const resolutions = isLargeVideo ? [0.5, 0.3, 0.2] : [1.0, 0.7, 0.5];
+      const bitrates = isLargeVideo ? ['400k', '200k', '100k'] : ['800k', '600k', '400k', '200k'];
       const codecs = ['h264_nvenc'];
       
       for (const codec of codecs) {
@@ -479,8 +517,8 @@ class VideoCompressor {
         }
       }
     } else {
-      const resolutions = [1.0, 0.7, 0.5];
-      const crfs = [28, 32, 36, 40];
+      const resolutions = isLargeVideo ? [0.5, 0.3, 0.2] : [1.0, 0.7, 0.5];
+      const crfs = isLargeVideo ? [32, 36, 40, 45] : [28, 32, 36, 40];
       const presets = ['fast', 'medium'];
       const codecs = ['h264'];
       
@@ -495,11 +533,14 @@ class VideoCompressor {
       }
     }
     
-    const maxConcurrent = Math.min(3, require('os').cpus().length);
+    const maxConcurrent = isLargeVideo ? Math.min(2, require('os').cpus().length) : Math.min(3, require('os').cpus().length); 
     const batchSize = Math.ceil(strategies.length / maxConcurrent);
     
     if (!this.options.skip) {
       console.log(`📦 Testing ${strategies.length} strategies in ${Math.ceil(strategies.length / batchSize)} batches of max ${batchSize} strategies`);
+      if (isLargeVideo) {
+        console.log(`⚠️ Large video detected (${width}x${height}) - using conservative settings`);
+      }
     }
     
     let bestResult = null;
@@ -518,12 +559,31 @@ class VideoCompressor {
         const tempOut = outputPath.replace(/\.[^.]+$/, `_extreme_${globalIndex}.mp4`);
         
         try {
+          const scaledWidth = Math.round(width * strategy.scale);
+          const scaledHeight = Math.round(height * strategy.scale);
+          const totalPixels = scaledWidth * scaledHeight;
+          
+          let optimalThreads;
+          if (totalPixels > 4000000) {
+            optimalThreads = Math.min(4, require('os').cpus().length);
+          } else if (totalPixels > 2000000) {
+            optimalThreads = Math.min(2, require('os').cpus().length);
+          } else {
+            optimalThreads = 1;
+          }
+          
           let command = require('fluent-ffmpeg')(inputFile)
             .videoCodec(this.getVideoCodec(strategy.codec))
             .audioCodec(this.getAudioCodec())
-            .addOption('-threads', '1')
+            .addOption('-threads', optimalThreads.toString())
             .addOption('-movflags', 'faststart')
             .addOption('-pix_fmt', 'yuv420p');
+          
+          if (isLargeVideo) {
+            command = command
+              .addOption('-bufsize', '2M')
+              .addOption('-maxrate', '10M');
+          }
           
           if (this.isFFmpegLimited || strategy.bitrate) {
             command = command.videoBitrate(strategy.bitrate || '1200k');
@@ -535,8 +595,8 @@ class VideoCompressor {
           }
           
           if (strategy.scale < 1.0) {
-            const w = Math.round((metadata.streams?.[0]?.width || 1920) * strategy.scale);
-            const h = Math.round((metadata.streams?.[0]?.height || 1080) * strategy.scale);
+            const w = Math.round(width * strategy.scale);
+            const h = Math.round(height * strategy.scale);
             command = command.size(`${w}x${h}`);
           }
           
@@ -553,7 +613,7 @@ class VideoCompressor {
           return result;
         } catch (e) {
           if (!this.options.skip) {
-            console.log(`❌ Strategy ${globalIndex+1} failed: ${e.message}`);
+            console.log(`❌ Strategy ${globalIndex+1} failed: ${e.message.split('\n')[0]}`);
           }
           try { await fs.unlink(tempOut); } catch {}
           return null;
@@ -595,7 +655,7 @@ class VideoCompressor {
         break;
       }
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, isLargeVideo ? 1000 : 500));
     }
     
     if (!bestResult) {
@@ -612,12 +672,31 @@ class VideoCompressor {
         console.log('🔄 Recreating best strategy for final output...');
       }
       
+      const scaledWidth = Math.round(width * bestResult.scale);
+      const scaledHeight = Math.round(height * bestResult.scale);
+      const totalPixels = scaledWidth * scaledHeight;
+      
+      let optimalThreads;
+      if (totalPixels > 4000000) {
+        optimalThreads = Math.min(4, require('os').cpus().length);
+      } else if (totalPixels > 2000000) {
+        optimalThreads = Math.min(2, require('os').cpus().length);
+      } else {
+        optimalThreads = 1;
+      }
+      
       let command = require('fluent-ffmpeg')(inputFile)
         .videoCodec(this.getVideoCodec(bestResult.codec))
         .audioCodec(this.getAudioCodec())
-        .addOption('-threads', '0')
+        .addOption('-threads', optimalThreads.toString())
         .addOption('-movflags', 'faststart')
         .addOption('-pix_fmt', 'yuv420p');
+      
+      if (isLargeVideo) {
+        command = command
+          .addOption('-bufsize', '2M')
+          .addOption('-maxrate', '10M');
+      }
       
       if (this.isFFmpegLimited || bestResult.bitrate) {
         command = command.videoBitrate(bestResult.bitrate || '1200k');
@@ -629,8 +708,8 @@ class VideoCompressor {
       }
       
       if (bestResult.scale < 1.0) {
-        const w = Math.round((metadata.streams?.[0]?.width || 1920) * bestResult.scale);
-        const h = Math.round((metadata.streams?.[0]?.height || 1080) * bestResult.scale);
+        const w = Math.round(width * bestResult.scale);
+        const h = Math.round(height * bestResult.scale);
         command = command.size(`${w}x${h}`);
       }
       command = command.output(finalOutputPath);
