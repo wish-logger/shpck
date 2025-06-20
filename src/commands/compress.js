@@ -97,11 +97,15 @@ async function compressCommand(files, options) {
       speedOptimized: options.ultrafast || false,
       skipOptimizations: options.noOptimize || false
     });
-    const videoCompressor = new VideoCompressor({
-      ...options,
-      speedOptimized: options.ultrafast || false,
-      skipOptimizations: options.noOptimize || false
-    });
+    
+    let videoCompressor = null;
+    if (fileGroups.videos.length > 0) {
+      videoCompressor = new VideoCompressor({
+        ...options,
+        speedOptimized: options.ultrafast || false,
+        skipOptimizations: options.noOptimize || false
+      });
+    }
     
     const results = {
       processed: 0,
@@ -182,7 +186,9 @@ async function compressCommand(files, options) {
         if (!isQuiet) {
           console.log(chalk.yellow(`🎥 Processing ${fileGroups.videos.length} videos...`));
         }
-        await processFiles(fileGroups.videos, videoCompressor, options, progressManager, results);
+        if (videoCompressor) {
+          await processFiles(fileGroups.videos, videoCompressor, options, progressManager, results);
+        }
       }
     }
 

@@ -208,7 +208,6 @@ class ThreadManager {
   
   async processSingleThreaded(files, options) {
     const { ImageCompressor } = require('../compressors/imageCompressor');
-    const { VideoCompressor } = require('../compressors/videoCompressor');
     const mime = require('mime-types');
     
     const imageCompressor = new ImageCompressor({
@@ -218,12 +217,21 @@ class ThreadManager {
       skipOptimizations: options.noOptimize || false
     });
     
-    const videoCompressor = new VideoCompressor({
-      ...this.options,
-      ...options,
-      speedOptimized: options.ultrafast || false,
-      skipOptimizations: options.noOptimize || false
+    let videoCompressor = null;
+    const hasVideo = files.some(f => {
+      const mimeType = mime.lookup(f);
+      return mimeType && mimeType.startsWith('video/');
     });
+    
+    if (hasVideo) {
+      const { VideoCompressor } = require('../compressors/videoCompressor');
+      videoCompressor = new VideoCompressor({
+        ...this.options,
+        ...options,
+        speedOptimized: options.ultrafast || false,
+        skipOptimizations: options.noOptimize || false
+      });
+    }
     
     const results = {
       processed: 0,
@@ -241,7 +249,11 @@ class ThreadManager {
         if (mimeType && mimeType.startsWith('image/')) {
           result = await imageCompressor.compress(file, options);
         } else if (mimeType && mimeType.startsWith('video/')) {
-          result = await videoCompressor.compress(file, options);
+          if (videoCompressor) {
+            result = await videoCompressor.compress(file, options);
+          } else {
+            throw new Error('VideoCompressor not available for video file');
+          }
         } else {
           throw new Error(`Unsupported file type: ${mimeType || 'unknown'}`);
         }
