@@ -183,12 +183,12 @@ await shpck.compress(['input.mp4'], {
   output: 'output.mp4'
 });
 
-// Batch processing with worker threads
+// Batch processing with worker threads (quiet mode)
 await shpck.compress(['*.jpg', '*.png'], {
   ultrafast: true,
   threads: 16,
   noOptimize: true,
-  quiet: true
+  skip: true // enables quiet mode/log suppression
 });
 ```
 

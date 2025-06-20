@@ -11,6 +11,7 @@
     "url": "https://github.com/wish-logger/shpck/issues"
   },
   "main": "src/api.js",
+  "types": "src/api.d.ts",
   "bin": {
     "shpck": "./bin/shpck.js"
   },
