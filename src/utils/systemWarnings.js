@@ -1,6 +1,6 @@
 const os = require('os');
 const fs = require('fs').promises;
-const chalk = require('chalk');
+const shcl = require('@impulsedev/shcl');
 
 class SystemWarnings {
   static async checkSystemOptimization(options = {}) {
@@ -43,18 +43,18 @@ class SystemWarnings {
     }
     
     if (!isQuiet && warnings.length > 0) {
-      console.log(chalk.yellow('\n⚠️  System Optimization Warnings:'));
+      console.log(shcl.yellow('\n⚠️  System Optimization Warnings:'));
       warnings.forEach(warning => {
         const icon = warning.severity === 'high' ? '🔴' : warning.severity === 'medium' ? '🟡' : '🟠';
         console.log(`${icon} ${warning.message}`);
       });
       
-      console.log(chalk.gray('\n💡 Potential Issues & Solutions:'));
-      console.log(chalk.gray('• Over-subscription: Use --threads <number> to limit workers'));
-      console.log(chalk.gray('• High memory: Monitor with Task Manager during compression'));
-      console.log(chalk.gray('• Disk bottleneck: Consider SSD for large file operations'));
-      console.log(chalk.gray('• CPU binding: OS handles core assignment automatically'));
-      console.log(chalk.gray('• Memory management: SharedArrayBuffer used for large files\n'));
+      console.log(shcl.gray('\n💡 Potential Issues & Solutions:'));
+      console.log(shcl.gray('• Over-subscription: Use --threads <number> to limit workers'));
+      console.log(shcl.gray('• High memory: Monitor with Task Manager during compression'));
+      console.log(shcl.gray('• Disk bottleneck: Consider SSD for large file operations'));
+      console.log(shcl.gray('• CPU binding: OS handles core assignment automatically'));
+      console.log(shcl.gray('• Memory management: SharedArrayBuffer used for large files\n'));
     }
     
     return warnings;

@@ -41,7 +41,7 @@
   "author": "ImpulseDev",
   "license": "MIT",
   "dependencies": {
-    "chalk": "^4.1.2",
+    "@impulsedev/shcl": "^1.0.2",
     "commander": "^11.1.0",
     "ffmpeg": "^0.0.4",
     "filesize": "^10.1.0",

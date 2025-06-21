@@ -1,7 +1,7 @@
 const { Worker } = require('worker_threads');
 const os = require('os');
 const path = require('path');
-const chalk = require('chalk');
+const shcl = require('@impulsedev/shcl');
 
 class ThreadManager {
   constructor(options = {}) {
@@ -29,19 +29,19 @@ class ThreadManager {
     }
     
     if (!this.isQuiet) {
-      console.log(chalk.gray(`🧵 Thread Manager: ${totalCores} CPU cores detected`));
+      console.log(shcl.gray(`🧵 Thread Manager: ${totalCores} CPU cores detected`));
       if (this.options.threads && this.options.ultrafast) {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (1.5x specified threads, ultrafast mode)`));
+        console.log(shcl.gray(`⚡ Using ${this.threadCount} worker threads (1.5x specified threads, ultrafast mode)`));
       } else if (this.options.threads) {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (specified threads)`));
+        console.log(shcl.gray(`⚡ Using ${this.threadCount} worker threads (specified threads)`));
       } else if (this.options.ultrafast) {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (2x per core, ultrafast mode)`));
+        console.log(shcl.gray(`⚡ Using ${this.threadCount} worker threads (2x per core, ultrafast mode)`));
       } else {
-        console.log(chalk.gray(`⚡ Using ${this.threadCount} worker threads (1.5x per core)`));
+        console.log(shcl.gray(`⚡ Using ${this.threadCount} worker threads (1.5x per core)`));
       }
       
       if (this.threadCount > totalCores * 2) {
-        console.log(chalk.yellow(`⚠️  Warning: High thread count detected (${this.threadCount} workers > ${totalCores * 2} optimal)`));
+        console.log(shcl.yellow(`⚠️  Warning: High thread count detected (${this.threadCount} workers > ${totalCores * 2} optimal)`));
       }
     }
   }
@@ -64,7 +64,7 @@ class ThreadManager {
     }
     
     if (!this.isQuiet) {
-      console.log(chalk.gray(`📦 Split ${files.length} files into ${chunks.length} chunks`));
+      console.log(shcl.gray(`📦 Split ${files.length} files into ${chunks.length} chunks`));
     }
     
     return chunks;
@@ -83,7 +83,7 @@ class ThreadManager {
 
     if (filesToProcess.length < 4 && !options.forceThreads) {
       if (!this.isQuiet) {
-        console.log(chalk.gray(`🔄 Using single thread for ${filesToProcess.length} files (overhead optimization)`));
+        console.log(shcl.gray(`🔄 Using single thread for ${filesToProcess.length} files (overhead optimization)`));
       }
       return this.processSingleThreaded(filesToProcess, options);
     }
@@ -97,14 +97,14 @@ class ThreadManager {
     };
     
     if (!this.isQuiet) {
-      console.log(chalk.cyan(`🚀 Starting multi-threaded compression with ${chunks.length} workers...`));
+      console.log(shcl.cyan(`🚀 Starting multi-threaded compression with ${chunks.length} workers...`));
     }
     
     try {
       await this.executeWorkers(chunks, options, results);
     } catch (error) {
       if (!this.isQuiet) {
-        console.error(chalk.red(`💥 Thread manager error: ${error.message}`));
+        console.error(shcl.red(`💥 Thread manager error: ${error.message}`));
       }
       throw error;
     } finally {
@@ -159,9 +159,9 @@ class ThreadManager {
             if (!this.isQuiet) {
               const reduction = ((message.result.originalSize - message.result.compressedSize) / message.result.originalSize * 100).toFixed(1);
               console.log(
-                chalk.green(`✓[W${message.workerIndex}]`) +
+                shcl.green(`✓[W${message.workerIndex}]`) +
                 ` ${message.file} ` +
-                chalk.gray(`-${reduction}%`)
+                shcl.gray(`-${reduction}%`)
               );
             }
             break;
@@ -173,7 +173,7 @@ class ThreadManager {
               worker: message.workerIndex
             });
             if (!this.isQuiet) {
-              console.log(chalk.red(`✗[W${message.workerIndex}]`) + ` ${message.file} - ${message.error}`);
+              console.log(shcl.red(`✗[W${message.workerIndex}]`) + ` ${message.file} - ${message.error}`);
             }
             break;
             
@@ -267,9 +267,9 @@ class ThreadManager {
         if (!this.isQuiet) {
           const reduction = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
           console.log(
-            chalk.green(`✓`) +
+            shcl.green(`✓`) +
             ` ${path.basename(file)} ` +
-            chalk.gray(`-${reduction}%`)
+            shcl.gray(`-${reduction}%`)
           );
         }
         
@@ -280,7 +280,7 @@ class ThreadManager {
         });
         
         if (!this.isQuiet) {
-          console.log(chalk.red(`✗`) + ` ${path.basename(file)} - ${error.message}`);
+          console.log(shcl.red(`✗`) + ` ${path.basename(file)} - ${error.message}`);
         }
       }
     }
@@ -294,11 +294,11 @@ class ThreadManager {
       const maxTime = Math.max(...results.processingTimes);
       const minTime = Math.min(...results.processingTimes);
       
-      console.log(chalk.cyan('\n📊 Thread Performance Stats:'));
-      console.log(`${chalk.gray('⏱️  Average processing time:')} ${avgTime.toFixed(0)}ms`);
-      console.log(`${chalk.gray('⚡ Fastest file:')} ${minTime.toFixed(0)}ms`);
-      console.log(`${chalk.gray('🐌 Slowest file:')} ${maxTime.toFixed(0)}ms`);
-      console.log(`${chalk.gray('🧵 Thread efficiency:')} ${(minTime/maxTime*100).toFixed(1)}%`);
+      console.log(shcl.cyan('\n📊 Thread Performance Stats:'));
+      console.log(`${shcl.gray('⏱️  Average processing time:')} ${avgTime.toFixed(0)}ms`);
+      console.log(`${shcl.gray('⚡ Fastest file:')} ${minTime.toFixed(0)}ms`);
+      console.log(`${shcl.gray('🐌 Slowest file:')} ${maxTime.toFixed(0)}ms`);
+      console.log(`${shcl.gray('🧵 Thread efficiency:')} ${(minTime/maxTime*100).toFixed(1)}%`);
     }
   }
   

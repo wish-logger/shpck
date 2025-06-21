@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs').promises;
-const chalk = require('chalk');
+const shcl = require('@impulsedev/shcl');
 const ora = require('ora');
 const { glob } = require('glob');
 const { filesize } = require('filesize');
@@ -47,7 +47,7 @@ async function compressCommand(files, options) {
         console.log('ERROR: No files found');
         return;
       }
-      spinner.fail(chalk.red('No files found matching the pattern'));
+      spinner.fail(shcl.red('No files found matching the pattern'));
       return;
     }
 
@@ -77,14 +77,14 @@ async function compressCommand(files, options) {
     }
 
     if (!isQuiet) {
-      spinner.succeed(chalk.green(`Found ${resolvedFiles.length} files to compress`));
+      spinner.succeed(shcl.green(`Found ${resolvedFiles.length} files to compress`));
     }
 
     if (!options.parallel) {
       const cpuCores = os.cpus().length;
       options.parallel = Math.max(cpuCores * 2, 8);
       if (!isQuiet) {
-        console.log(chalk.gray(`⚡ Auto-detected ${options.parallel} parallel processes`));
+        console.log(shcl.gray(`⚡ Auto-detected ${options.parallel} parallel processes`));
       }
     }
 
@@ -125,30 +125,30 @@ async function compressCommand(files, options) {
       
       if (!isQuiet && hasLargeFiles) {
         const largeFiles = checkForLargeFiles.largeFiles || [];
-        console.log(chalk.yellow('📦 Large files detected (>3GB) - auto-enabling multi-threading'));
+        console.log(shcl.yellow('📦 Large files detected (>3GB) - auto-enabling multi-threading'));
         largeFiles.forEach(({file, size}) => {
-          console.log(chalk.gray(`   • ${file}: ${filesize(size)}`));
+          console.log(shcl.gray(`   • ${file}: ${filesize(size)}`));
         });
       }
     }
     
     if (!isQuiet) {
       if (useMultiThread) {
-        console.log(chalk.cyan('\n🧵 Starting multi-threaded compression...\n'));
+        console.log(shcl.cyan('\n🧵 Starting multi-threaded compression...\n'));
       } else {
-        console.log(chalk.cyan('\n🚀 Starting compression...\n'));
+        console.log(shcl.cyan('\n🚀 Starting compression...\n'));
       }
     }
 
     if (fileGroups.videos.length > 0 && options.overwrite && !isQuiet) {
-      console.log(chalk.yellow('⚠️  Warning: The --overwrite flag is not supported for video files.'));
+      console.log(shcl.yellow('⚠️  Warning: The --overwrite flag is not supported for video files.'));
     }
 
     if (options.keepDimensions || options.k) {
       delete options.width;
       delete options.height;
       if (!isQuiet) {
-        console.log(chalk.cyan('🖼️  Keeping original dimensions (width, height)'));
+        console.log(shcl.cyan('🖼️  Keeping original dimensions (width, height)'));
       }
     }
 
@@ -157,7 +157,7 @@ async function compressCommand(files, options) {
       
       if (fileGroups.images.length > 0) {
         if (!isQuiet) {
-          console.log(chalk.yellow(`📸 Processing ${fileGroups.images.length} images with worker threads...`));
+          console.log(shcl.yellow(`📸 Processing ${fileGroups.images.length} images with worker threads...`));
         }
         const imageResults = await threadManager.processFiles(fileGroups.images, options);
         results.processed += imageResults.processed;
@@ -167,7 +167,7 @@ async function compressCommand(files, options) {
 
       if (fileGroups.videos.length > 0) {
         if (!isQuiet) {
-          console.log(chalk.yellow(`🎥 Processing ${fileGroups.videos.length} videos with worker threads...`));
+          console.log(shcl.yellow(`🎥 Processing ${fileGroups.videos.length} videos with worker threads...`));
         }
         const videoResults = await threadManager.processFiles(fileGroups.videos, options);
         results.processed += videoResults.processed;
@@ -177,14 +177,14 @@ async function compressCommand(files, options) {
     } else {
       if (fileGroups.images.length > 0) {
         if (!isQuiet) {
-          console.log(chalk.yellow(`📸 Processing ${fileGroups.images.length} images...`));
+          console.log(shcl.yellow(`📸 Processing ${fileGroups.images.length} images...`));
         }
         await processFiles(fileGroups.images, imageCompressor, options, progressManager, results);
       }
 
       if (fileGroups.videos.length > 0) {
         if (!isQuiet) {
-          console.log(chalk.yellow(`🎥 Processing ${fileGroups.videos.length} videos...`));
+          console.log(shcl.yellow(`🎥 Processing ${fileGroups.videos.length} videos...`));
         }
         if (videoCompressor) {
           await processFiles(fileGroups.videos, videoCompressor, options, progressManager, results);
@@ -193,7 +193,7 @@ async function compressCommand(files, options) {
     }
 
     if (fileGroups.other.length > 0 && !isQuiet) {
-      console.log(chalk.yellow(`📄 ${fileGroups.other.length} other files detected (not yet supported)`));
+      console.log(shcl.yellow(`📄 ${fileGroups.other.length} other files detected (not yet supported)`));
     }
 
     showSummary(results, isQuiet);
@@ -202,7 +202,7 @@ async function compressCommand(files, options) {
     if (isQuiet) {
       console.log(`ERROR: ${error.message}`);
     } else {
-      spinner.fail(chalk.red(`Compression failed: ${error.message}`));
+      spinner.fail(shcl.red(`Compression failed: ${error.message}`));
       console.error(error);
     }
     process.exit(1);
@@ -308,17 +308,17 @@ async function processFiles(files, compressor, options, progressManager, results
       if (!isQuiet) {
         const reduction = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
         console.log(
-          chalk.green('✓') +
+          shcl.green('✓') +
           ` ${path.basename(file)} ` +
-          chalk.gray(`(${filesize(result.originalSize)} → ${filesize(result.compressedSize)}) `) +
-          chalk.cyan(`-${reduction}%`)
+          shcl.gray(`(${filesize(result.originalSize)} → ${filesize(result.compressedSize)}) `) +
+          shcl.cyan(`-${reduction}%`)
         );
       }
       
     } catch (error) {
       results.errors.push({ file, error: error.message });
       if (!isQuiet) {
-        console.log(chalk.red('✗') + ` ${path.basename(file)} - ${error.message}`);
+        console.log(shcl.red('✗') + ` ${path.basename(file)} - ${error.message}`);
       }
     } finally {
       currentlyProcessing--;
@@ -344,19 +344,19 @@ function showSummary(results, isQuiet = false) {
     return;
   }
 
-  console.log(chalk.cyan('\n📊 Compression Summary\n'));
-  console.log(`${chalk.green('✓')} Files processed: ${chalk.bold(results.processed)}`);
-  console.log(`${chalk.red('✗')} Errors: ${chalk.bold(results.errors.length)}`);
-  console.log(`💾 Total space saved: ${chalk.bold(filesize(results.totalSizeReduction))}`);
+  console.log(shcl.cyan('\n📊 Compression Summary\n'));
+  console.log(`${shcl.green('✓')} Files processed: ${shcl.bold(results.processed)}`);
+  console.log(`${shcl.red('✗')} Errors: ${shcl.bold(results.errors.length)}`);
+  console.log(`💾 Total space saved: ${shcl.bold(filesize(results.totalSizeReduction))}`);
   
   if (results.errors.length > 0) {
-    console.log(chalk.red('\n❌ Errors:'));
+    console.log(shcl.red('\n❌ Errors:'));
     results.errors.forEach(({ file, error }) => {
-      console.log(`  ${chalk.red('•')} ${path.basename(file)}: ${error}`);
+      console.log(`  ${shcl.red('•')} ${path.basename(file)}: ${error}`);
     });
   }
   
-  console.log(chalk.green('\n🎉 Compression completed!\n'));
+  console.log(shcl.green('\n🎉 Compression completed!\n'));
 }
 
 module.exports = { compressCommand }; 

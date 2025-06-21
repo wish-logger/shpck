@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs').promises;
-const chalk = require('chalk');
+const shcl = require('@impulsedev/shcl');
 const ora = require('ora');
 const { glob } = require('glob');
 const { filesize } = require('filesize');
@@ -13,15 +13,15 @@ async function analyzeCommand(files, options) {
     const resolvedFiles = await resolveFiles(files, options.recursive);
     
     if (resolvedFiles.length === 0) {
-      spinner.fail(chalk.red('No files found matching the pattern'));
+      spinner.fail(shcl.red('No files found matching the pattern'));
       return;
     }
 
-    spinner.succeed(chalk.green(`Found ${resolvedFiles.length} files to analyze`));
+    spinner.succeed(shcl.green(`Found ${resolvedFiles.length} files to analyze`));
 
     const fileGroups = await groupFilesByType(resolvedFiles);
     
-    console.log(chalk.cyan('\n📊 File Analysis Report\n'));
+    console.log(shcl.cyan('\n📊 File Analysis Report\n'));
     
     const analysis = {
       images: await analyzeImages(fileGroups.images, options),
@@ -32,7 +32,7 @@ async function analyzeCommand(files, options) {
     displayAnalysisSummary(analysis, options);
 
   } catch (error) {
-    spinner.fail(chalk.red(`Analysis failed: ${error.message}`));
+    spinner.fail(shcl.red(`Analysis failed: ${error.message}`));
     console.error(error);
     process.exit(1);
   }
@@ -93,7 +93,7 @@ async function groupFilesByType(files) {
 async function analyzeImages(imageFiles, options) {
   if (imageFiles.length === 0) return null;
   
-  console.log(chalk.yellow(`🖼️  Analyzing ${imageFiles.length} images...`));
+  console.log(shcl.yellow(`🖼️  Analyzing ${imageFiles.length} images...`));
   
   const analysis = {
     count: imageFiles.length,
@@ -124,14 +124,14 @@ async function analyzeImages(imageFiles, options) {
       
       if (options.detailed) {
         console.log(
-          `  ${chalk.blue(path.basename(file))} ` +
-          chalk.gray(`(${filesize(stats.size)}) `) +
-          chalk.green(`~${estimatedReduction}% reduction`)
+          `  ${shcl.blue(path.basename(file))} ` +
+          shcl.gray(`(${filesize(stats.size)}) `) +
+          shcl.green(`~${estimatedReduction}% reduction`)
         );
       }
       
     } catch (error) {
-      console.log(chalk.red(`  ✗ ${path.basename(file)} - ${error.message}`));
+      console.log(shcl.red(`  ✗ ${path.basename(file)} - ${error.message}`));
     }
   }
   
@@ -141,7 +141,7 @@ async function analyzeImages(imageFiles, options) {
 async function analyzeVideos(videoFiles, options) {
   if (videoFiles.length === 0) return null;
   
-  console.log(chalk.yellow(`🎥 Analyzing ${videoFiles.length} videos...`));
+  console.log(shcl.yellow(`🎥 Analyzing ${videoFiles.length} videos...`));
   
   const analysis = {
     count: videoFiles.length,
@@ -172,14 +172,14 @@ async function analyzeVideos(videoFiles, options) {
       
       if (options.detailed) {
         console.log(
-          `  ${chalk.blue(path.basename(file))} ` +
-          chalk.gray(`(${filesize(stats.size)}) `) +
-          chalk.green(`~${estimatedReduction}% reduction`)
+          `  ${shcl.blue(path.basename(file))} ` +
+          shcl.gray(`(${filesize(stats.size)}) `) +
+          shcl.green(`~${estimatedReduction}% reduction`)
         );
       }
       
     } catch (error) {
-      console.log(chalk.red(`  ✗ ${path.basename(file)} - ${error.message}`));
+      console.log(shcl.red(`  ✗ ${path.basename(file)} - ${error.message}`));
     }
   }
   
@@ -189,7 +189,7 @@ async function analyzeVideos(videoFiles, options) {
 async function analyzeOther(otherFiles, options) {
   if (otherFiles.length === 0) return null;
   
-  console.log(chalk.yellow(`📄 Found ${otherFiles.length} other files (not supported for compression)`));
+  console.log(shcl.yellow(`📄 Found ${otherFiles.length} other files (not supported for compression)`));
   
   return {
     count: otherFiles.length,
@@ -269,7 +269,7 @@ function getVideoRecommendations(format, size) {
 }
 
 function displayAnalysisSummary(analysis, options) {
-  console.log(chalk.cyan('\n📋 Summary\n'));
+  console.log(shcl.cyan('\n📋 Summary\n'));
     
   let totalFiles = 0;
   let totalSize = 0;
@@ -280,8 +280,8 @@ function displayAnalysisSummary(analysis, options) {
     totalSize += analysis.images.totalSize;
     totalEstimatedSavings += analysis.images.estimatedReduction;
     
-    console.log(`🖼️  Images: ${chalk.bold(analysis.images.count)} files, ${chalk.bold(filesize(analysis.images.totalSize))}`);
-    console.log(`   Estimated savings: ${chalk.green(filesize(analysis.images.estimatedReduction))} (${((analysis.images.estimatedReduction / analysis.images.totalSize) * 100).toFixed(1)}%)`);
+    console.log(`🖼️  Images: ${shcl.bold(analysis.images.count)} files, ${shcl.bold(filesize(analysis.images.totalSize))}`);
+    console.log(`   Estimated savings: ${shcl.green(filesize(analysis.images.estimatedReduction))} (${((analysis.images.estimatedReduction / analysis.images.totalSize) * 100).toFixed(1)}%)`);
   }
   
   if (analysis.videos) {
@@ -289,21 +289,21 @@ function displayAnalysisSummary(analysis, options) {
     totalSize += analysis.videos.totalSize;
     totalEstimatedSavings += analysis.videos.estimatedReduction;
     
-    console.log(`🎥 Videos: ${chalk.bold(analysis.videos.count)} files, ${chalk.bold(filesize(analysis.videos.totalSize))}`);
-    console.log(`   Estimated savings: ${chalk.green(filesize(analysis.videos.estimatedReduction))} (${((analysis.videos.estimatedReduction / analysis.videos.totalSize) * 100).toFixed(1)}%)`);
+    console.log(`🎥 Videos: ${shcl.bold(analysis.videos.count)} files, ${shcl.bold(filesize(analysis.videos.totalSize))}`);
+    console.log(`   Estimated savings: ${shcl.green(filesize(analysis.videos.estimatedReduction))} (${((analysis.videos.estimatedReduction / analysis.videos.totalSize) * 100).toFixed(1)}%)`);
   }
   
   if (analysis.other) {
     totalFiles += analysis.other.count;
-    console.log(`📄 Other files: ${chalk.bold(analysis.other.count)} files (not supported)`);
+    console.log(`📄 Other files: ${shcl.bold(analysis.other.count)} files (not supported)`);
   }
   
-  console.log(chalk.gray('─'.repeat(50)));
-  console.log(`📊 Total: ${chalk.bold(totalFiles)} files, ${chalk.bold(filesize(totalSize))}`);
-  console.log(`💾 Estimated total savings: ${chalk.bold.green(filesize(totalEstimatedSavings))} (${((totalEstimatedSavings / totalSize) * 100).toFixed(1)}%)`);
+  console.log(shcl.gray('─'.repeat(50)));
+  console.log(`📊 Total: ${shcl.bold(totalFiles)} files, ${shcl.bold(filesize(totalSize))}`);
+  console.log(`💾 Estimated total savings: ${shcl.bold.green(filesize(totalEstimatedSavings))} (${((totalEstimatedSavings / totalSize) * 100).toFixed(1)}%)`);
   
-  console.log(chalk.green('\n💡 Run compression to achieve these savings!'));
-  console.log(chalk.gray('   Use: shpck compress <files> --quality 80'));
+  console.log(shcl.green('\n💡 Run compression to achieve these savings!'));
+  console.log(shcl.gray('   Use: shpck compress <files> --quality 80'));
 }
 
 module.exports = { analyzeCommand }; 

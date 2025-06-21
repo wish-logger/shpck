@@ -1,4 +1,4 @@
-const chalk = require('chalk');
+const shcl = require('@impulsedev/shcl');
 
 class ProgressManager {
   constructor(totalFiles) {
@@ -25,9 +25,9 @@ class ProgressManager {
     
     process.stdout.write('\r\x1b[K');
     process.stdout.write(
-      `${chalk.cyan(`[${progress}%]`)} ` +
-      `${chalk.green('✓')} ${fileName} ` +
-      `${chalk.gray(`(-${reduction}%)`)}`
+      `${shcl.cyan(`[${progress}%]`)} ` +
+      `${shcl.green('✓')} ${fileName} ` +
+      `${shcl.gray(`(-${reduction}%)`)}`
     );
   }
 
@@ -87,16 +87,16 @@ class ProgressManager {
   displayFinalStats() {
     const stats = this.getStats();
     
-    console.log('\n' + chalk.cyan('📊 Final Statistics'));
-    console.log(chalk.gray('─'.repeat(50)));
+    console.log('\n' + shcl.cyan('📊 Final Statistics'));
+    console.log(shcl.gray('─'.repeat(50)));
     
-    console.log(`${chalk.green('✓')} Files processed: ${chalk.bold(stats.processedFiles)}/${stats.totalFiles}`);
-    console.log(`⏱️  Total time: ${chalk.bold(this.formatTime(stats.elapsedTime))}`);
-    console.log(`📏 Original size: ${chalk.bold(this.formatSize(stats.totalOriginalSize))}`);
-    console.log(`📦 Compressed size: ${chalk.bold(this.formatSize(stats.totalCompressedSize))}`);
-    console.log(`💾 Space saved: ${chalk.bold.green(this.formatSize(stats.spaceSaved))} ${chalk.gray(`(${stats.totalReduction}%)`)}`);
-    console.log(`📈 Average reduction: ${chalk.bold(stats.averageReduction)}%`);
-    console.log(`⚡ Processing speed: ${chalk.bold(stats.filesPerSecond.toFixed(1))} files/sec`);
+    console.log(`${shcl.green('✓')} Files processed: ${shcl.bold(stats.processedFiles)}/${stats.totalFiles}`);
+    console.log(`⏱️  Total time: ${shcl.bold(this.formatTime(stats.elapsedTime))}`);
+    console.log(`📏 Original size: ${shcl.bold(this.formatSize(stats.totalOriginalSize))}`);
+    console.log(`📦 Compressed size: ${shcl.bold(this.formatSize(stats.totalCompressedSize))}`);
+    console.log(`💾 Space saved: ${shcl.bold.green(this.formatSize(stats.spaceSaved))} ${shcl.gray(`(${stats.totalReduction}%)`)}`);
+    console.log(`📈 Average reduction: ${shcl.bold(stats.averageReduction)}%`);
+    console.log(`⚡ Processing speed: ${shcl.bold(stats.filesPerSecond.toFixed(1))} files/sec`);
   }
 
   getProgressBar(current, total, width = 30) {
@@ -104,7 +104,7 @@ class ProgressManager {
     const completed = Math.floor(progress * width);
     const remaining = width - completed;
     
-    const bar = chalk.green('█'.repeat(completed)) + chalk.gray('░'.repeat(remaining));
+    const bar = shcl.green('█'.repeat(completed)) + shcl.gray('░'.repeat(remaining));
     const percentage = (progress * 100).toFixed(1);
     
     return `[${bar}] ${percentage}%`;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { program } = require('commander');
-const chalk = require('chalk');
+const shcl = require('@impulsedev/shcl');
 const pkg = require('../package.json');
 const { compressCommand } = require('./commands/compress');
 const { analyzeCommand } = require('./commands/analyze');
@@ -10,7 +10,7 @@ const { configCommand } = require('./commands/config');
 const hasQuietFlag = process.argv.includes('-s') || process.argv.includes('--skip');
 
 if (!hasQuietFlag) {
-  console.log(chalk.cyan(`
+  console.log(shcl.cyan(`
  ███████╗██╗  ██╗██████╗  ██████╗██╗  ██╗
  ██╔════╝██║  ██║██╔══██╗██╔════╝██║ ██╔╝
  ███████╗███████║██████╔╝██║     █████╔╝ 
@@ -19,8 +19,8 @@ if (!hasQuietFlag) {
  ╚══════╝╚═╝  ╚═╝╚═╝      ╚═════╝╚═╝  ╚═╝
 `));
 
-  console.log(chalk.yellow(`🚀 SHPCK v${pkg.version} - Wish Packer`));
-  console.log(chalk.gray('Fast file compression for images, videos & media\n'));
+  console.log(shcl.yellow(`🚀 SHPCK v${pkg.version} - Wish Packer`));
+  console.log(shcl.gray('Fast file compression for images, videos & media\n'));
 }
 
 program
@@ -72,14 +72,14 @@ program
 
 process.on('uncaughtException', (error) => {
   if (!hasQuietFlag) {
-    console.error(chalk.red('Error:'), error.message);
+    console.error(shcl.red('Error:'), error.message);
   }
   process.exit(1);
 });
 
 process.on('unhandledRejection', (error) => {
   if (!hasQuietFlag) {
-    console.error(chalk.red('Unhandled promise rejection:'), error.message);
+    console.error(shcl.red('Unhandled promise rejection:'), error.message);
   }
   process.exit(1);
 });

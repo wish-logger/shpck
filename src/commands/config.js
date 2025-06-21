@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
-const chalk = require('chalk');
+const shcl = require('@impulsedev/shcl');
 const os = require('os');
 
 const CONFIG_FILE = '.shpckrc.json';
@@ -46,7 +46,7 @@ async function configCommand(options) {
       await interactiveConfig();
     }
   } catch (error) {
-    console.error(chalk.red(`Config error: ${error.message}`));
+    console.error(shcl.red(`Config error: ${error.message}`));
     process.exit(1);
   }
 }
@@ -56,17 +56,17 @@ async function initializeConfig() {
   
   try {
     if (await fileExists(configPath)) {
-      console.log(chalk.yellow(`Configuration file already exists at: ${configPath}`));
-      console.log(chalk.gray('Use --show to view current configuration or manually edit the file.'));
+      console.log(shcl.yellow(`Configuration file already exists at: ${configPath}`));
+      console.log(shcl.gray('Use --show to view current configuration or manually edit the file.'));
       return;
     }
     
     await fs.writeFile(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
     
-    console.log(chalk.green('✓ Configuration file created successfully!'));
-    console.log(chalk.cyan(`📍 Location: ${configPath}`));
-    console.log(chalk.gray('\nYou can now customize the settings by editing the file or using:'));
-    console.log(chalk.gray('  shpck config --set key=value'));
+    console.log(shcl.green('✓ Configuration file created successfully!'));
+    console.log(shcl.cyan(`📍 Location: ${configPath}`));
+    console.log(shcl.gray('\nYou can now customize the settings by editing the file or using:'));
+    console.log(shcl.gray('  shpck config --set key=value'));
     
   } catch (error) {
     throw new Error(`Failed to create configuration file: ${error.message}`);
@@ -76,7 +76,7 @@ async function initializeConfig() {
 async function showConfig() {
   const config = await loadConfig();
   
-  console.log(chalk.cyan('📋 Current Configuration\n'));
+  console.log(shcl.cyan('📋 Current Configuration\n'));
   
   displayConfigSection('🖼️  Image Settings', config.image);
   displayConfigSection('🎥 Video Settings', config.video);
@@ -85,17 +85,17 @@ async function showConfig() {
   displayConfigSection('🔧 Advanced Settings', config.advanced);
   
   const configPath = await getConfigPath();
-  console.log(chalk.gray(`\n📍 Config file: ${configPath}`));
+  console.log(shcl.gray(`\n📍 Config file: ${configPath}`));
 }
 
 function displayConfigSection(title, section) {
-  console.log(chalk.bold(title));
+  console.log(shcl.bold(title));
   
   for (const [key, value] of Object.entries(section)) {
     const formattedKey = key.padEnd(15);
     const formattedValue = typeof value === 'boolean' 
-      ? (value ? chalk.green('enabled') : chalk.red('disabled'))
-      : chalk.cyan(value);
+      ? (value ? shcl.green('enabled') : shcl.red('disabled'))
+      : shcl.cyan(value);
     
     console.log(`  ${formattedKey} ${formattedValue}`);
   }
@@ -134,17 +134,17 @@ async function setConfigValue(keyValue) {
   
   await saveConfig(config);
   
-  console.log(chalk.green(`✓ Configuration updated: ${keyPath} = ${value}`));
+  console.log(shcl.green(`✓ Configuration updated: ${keyPath} = ${value}`));
 }
 
 async function interactiveConfig() {
-  console.log(chalk.cyan('🔧 SHPCK Configuration Manager\n'));
+  console.log(shcl.cyan('🔧 SHPCK Configuration Manager\n'));
   console.log('Available commands:');
   console.log('  --init        Initialize default configuration');
   console.log('  --show        Show current configuration');
   console.log('  --set key=val Set configuration value');
   
-  console.log(chalk.yellow('\nExample usage:'));
+  console.log(shcl.yellow('\nExample usage:'));
   console.log('  shpck config --init');
   console.log('  shpck config --show');
   console.log('  shpck config --set image.quality=90');
@@ -164,7 +164,7 @@ async function loadConfig() {
       return DEFAULT_CONFIG;
     }
   } catch (error) {
-    console.log(chalk.yellow(`Warning: Could not load config file, using defaults: ${error.message}`));
+    console.log(shcl.yellow(`Warning: Could not load config file, using defaults: ${error.message}`));
     return DEFAULT_CONFIG;
   }
 }
